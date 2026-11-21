@@ -8,9 +8,11 @@ result is saved, so editing a label changes the answer at once:
       * a console Matrix whose Destination is a processor input's label, or
         "<processor> <type> <n>" ("SL P1 AES 1"), or a processor's name on its
         own (a device-level match: the processor, no port).
-      A Matrix fed out through an I/O output that itself matched the same
-      processor is dropped (VIA_IO): the I/O output is the physical hop, and
-      counting both would draw the feed twice.
+      A Matrix fed out through an I/O output that itself matched (or is
+      linked to) the same processor is dropped (VIA_IO): the I/O output is
+      the physical hop, and counting both would draw the feed twice.
+      Only inputs with no stored link are matched: an AES / Analog input
+      linked to its source (a ``Connection``, PR 2b-3) is drawn from it.
 
   (b) processor (or I/O) output -> amp channel input
       Only inputs with no stored link: an input linked to its source output
@@ -238,6 +240,8 @@ class ProjectIndex:
         self.amp_channels = []        # Port, every channel, filled in or not
         self.amp_links = []           # (Connection pk, source Port or None, channel Port or None, transport)
         self.linked_inputs = set()    # (channel ref, field) with a stored link
+        self.processor_links = []     # (Connection pk, source Port or None, input Port or None, transport)
+        self.linked_processor_inputs = set()   # processor input refs with a stored link
         self.pa_rows = []             # PACableSchedule
         self.array_names = defaultdict(set)     # norm(name) -> {node id}
         self.amp_location_names = defaultdict(set)
@@ -400,6 +404,23 @@ class ProjectIndex:
             if transport in TRANSPORT_FIELD:
                 self.linked_inputs.add((ep.port_ref('ampchannel', to_id), TRANSPORT_FIELD[transport]))
 
+        # Stored links: a processor input linked to its source (PR 2b-3) --
+        prefixes = {ContentType.objects.get_for_model(model).pk: prefix
+                    for model, prefix in ((DeviceOutput, 'deviceoutput'),
+                                          (ConsoleAuxOutput, 'consoleauxoutput'),
+                                          (ConsoleMatrixOutput, 'consolematrixoutput'),
+                                          (ConsoleStereoOutput, 'consolestereooutput'))}
+        inputs = {ContentType.objects.get_for_model(model).pk: prefix
+                  for model, prefix in ((P1Input, 'p1input'), (GalaxyInput, 'galaxyinput'))}
+        rows = (Connection.objects.filter(project_id=pid, to_ct_id__in=inputs)
+                .order_by('pk').values_list('pk', 'from_ct_id', 'from_id', 'to_ct_id', 'to_id',
+                                            'transport'))
+        for pk, from_ct, from_id, to_ct, to_id, transport in rows:
+            source = self.ports.get(ep.port_ref(prefixes.get(from_ct, ''), from_id))
+            ref = ep.port_ref(inputs[to_ct], to_id)
+            self.processor_links.append((pk, source, self.ports.get(ref), transport))
+            self.linked_processor_inputs.add(ref)
+
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
                             .select_related('label')
@@ -426,9 +447,15 @@ def _resolve(rule, source, text, ports, **kw):
     return Match(rule, verdict, source, text, candidates=ports, **kw)
 
 
+def _unlinked_inputs(index):
+    """Processor inputs with no stored link: only these are matched by text
+    (a linked one is drawn from its source, PR 2b-3)."""
+    return [p for p in index.processor_inputs if p.ref not in index.linked_processor_inputs]
+
+
 def _inputs_by_label(index):
     by_label = defaultdict(list)
-    for port in index.processor_inputs:
+    for port in _unlinked_inputs(index):
         if norm(port.text):
             by_label[norm(port.text)].append(port)
     return by_label
@@ -444,7 +471,7 @@ def _typed_port(index, key):
         if not m:
             continue
         port_type, number = _TYPE_WORDS[m.group(1)], int(m.group(2))
-        found += [p for p in index.processor_inputs
+        found += [p for p in _unlinked_inputs(index)
                   if p.node in nodes and p.type == port_type and p.number == number]
     return found
 
@@ -485,6 +512,9 @@ def rule_a(index):
     for m in io:
         if m.verdict in RESOLVED and bus_of.get(m.source.ref):
             reached[bus_of[m.source.ref]] |= _target_nodes(m)
+    for _, source, target, _ in index.processor_links:     # linked I/O outputs too
+        if source and target and bus_of.get(source.ref):
+            reached[bus_of[source.ref]].add(target.node)
 
     matrices = []
     for port, text in index.matrices:

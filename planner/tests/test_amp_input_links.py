@@ -184,16 +184,30 @@ class EntryTests(_Rig, TestCase):
         self.assertEqual(e['CENTER · Stage Box Out 1'].pk, self.out1.pk)
         self.assertEqual(e['Stage Box Out 2'].pk, self.out2.pk)
 
-    def test_ambiguous_text_cannot_occur_because_repeats_are_left_out(self):
+    def test_repeats_are_lengthened_with_the_location_so_both_stay_pickable(self):
         twin = self.p1('SL P1')                                  # same name
-        self.p1_out(twin, 'AVB', 3, 'L Main')
+        twin.location = self.location(self.project, 'Delay Tower')
+        twin.save()
+        twin_avb3 = self.p1_out(twin, 'AVB', 3, 'L Main')
         e = self.entries()
         self.assertNotIn('AVB 3 - L Main (SL P1)', e['avb_stream'])
+        self.assertEqual(e['avb_stream']['AVB 3 - L Main (SL P1) (SL P1 loc)'].pk, self.avb3.pk)
+        self.assertEqual(e['avb_stream']['AVB 3 - L Main (SL P1) (Delay Tower)'].pk, twin_avb3.pk)
         for field, entries in e.items():
             sources = [s.key for s in entries.values()]
             self.assertEqual(len(sources), len(set(sources)), field)
-        # Typing the repeated text links nothing.
+        # The old, shorter text names neither now: it links nothing.
         self.ch1.avb_stream = 'AVB 3 - L Main (SL P1)'
+        self.ch1.save()
+        self.assertIsNone(S.link_from_text(self.ch1, 'avb_stream'))
+
+    def test_repeats_still_alike_are_listed_once_as_duplicates_and_link_nothing(self):
+        twin = self.p1('SL P1')                                  # same name, location text, IP
+        self.p1_out(twin, 'AVB', 3, 'L Main')
+        text = 'AVB 3 - L Main (SL P1) (duplicate device)'
+        self.assertNotIn(text, self.entries()['avb_stream'])
+        self.assertEqual(S.listing(S.all_sources(self.project))['avb_stream'].count(text), 1)
+        self.ch1.avb_stream = text
         self.ch1.save()
         self.assertIsNone(S.link_from_text(self.ch1, 'avb_stream'))
 

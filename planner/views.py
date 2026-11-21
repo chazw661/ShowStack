@@ -4079,6 +4079,23 @@ def amp_channel_inline_update(request, channel_id):
     return JsonResponse({'success': True})
 
 
+@require_POST
+@login_required
+@edit_rights_required
+def processor_input_unlink(request, kind, input_id):
+    """PR 2b-3: a P1 / Galaxy input's "Unlink (keep text)"."""
+    from planner.connections import processor_sources
+    project = _project_or_403(request)
+    model = processor_sources.TARGET_MODELS.get(kind)
+    if not project or model is None:
+        return JsonResponse({'success': False, 'error': 'Not found'}, status=404)
+    owner = 'p1_processor' if kind == 'p1input' else 'galaxy_processor'
+    processor_input = get_object_or_404(
+        model, pk=input_id, **{f'{owner}__system_processor__project': project})
+    processor_sources.unlink(processor_input)
+    return JsonResponse({'success': True, 'linked': ''})
+
+
 _INLINE_CABINET_FIELDS = {'cabinet_section', 'cabinet_quantity'}
 MAX_CABINETS_PER_OUTPUT = 24
 

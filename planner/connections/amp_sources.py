@@ -10,16 +10,18 @@ can feed it, one entry per output, unique because it names the device:
 Saving text that is exactly one entry links the input (a ``Connection``);
 anything else links nothing and removes a link the input had. No fuzzy
 matching. Two outputs that would read the same (two processors of one name)
-are left out of the list, so a saved entry always names one output. The text
-is a copy: when a linked output, its processor or its device is renamed,
-``refresh_linked_text`` rewrites it.
+are lengthened with their location, then their IP (``sources.disambiguate``),
+so both stay pickable. The text is a copy: when a linked output, its
+processor or its device is renamed, ``rewrite`` brings it back in line
+(called through ``sources.changed``).
 """
 from collections import defaultdict
-from dataclasses import dataclass
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
+from planner.connections import sources as S
+from planner.connections.sources import Source
 from planner.models import (AmpChannel, Connection, DeviceOutput, GalaxyOutput,
                             P1Output)
 
@@ -31,18 +33,6 @@ PROCESSOR_FIELD_TYPE = {f: t for t, f in PROCESSOR_FIELD.items()}
 TYPE_WORD = {'AES': 'AES', 'ANALOG': 'Analog'}
 SOURCE_MODELS = {'p1output': P1Output, 'galaxyoutput': GalaxyOutput,
                  'deviceoutput': DeviceOutput}
-
-
-@dataclass(frozen=True)
-class Source:
-    model: str          # 'p1output' / 'galaxyoutput' / 'deviceoutput'
-    pk: int
-    field: str          # the amp input field it can feed
-    text: str           # its datalist entry, and what the field stores when linked
-
-    @property
-    def key(self):
-        return (self.model, self.pk)
 
 
 def processor_entry(field, processor, number, label):
@@ -61,35 +51,47 @@ def io_entry(device, position, signal):
     return f'{signal} · {port}' if signal else port
 
 
-def all_sources(project):
-    """Every (output, field) pair of the project with its entry, in list order:
-    processors by name then port, then I/O devices by name then position.
-    Entries can repeat here; ``picker`` drops the repeats."""
-    out = []
-    for model, owner, prefix in ((P1Output, 'p1_processor', 'p1output'),
-                                 (GalaxyOutput, 'galaxy_processor', 'galaxyoutput')):
-        rows = (model.objects
-                .filter(**{f'{owner}__system_processor__project': project})
-                .values_list('pk', f'{owner}__system_processor__name', 'output_type',
-                             'channel_number', 'label'))
-        for pk, name, port_type, number, label in rows:
-            field = PROCESSOR_FIELD.get(port_type)
-            if field:
-                out.append(((0, name.casefold(), name, FIELDS.index(field), number, pk),
-                            Source(prefix, pk, field, processor_entry(field, name, number, label))))
+def io_sources(project, fields):
+    """Every I/O output of the project, once per field in ``fields``, keyed
+    for ordering by device name then position."""
     rows = (DeviceOutput.objects
             .filter(device__project=project, output_number__isnull=False)
             .order_by('device_id', 'output_number', 'pk')
-            .values_list('pk', 'device_id', 'device__name', 'signal_name'))
+            .values_list('pk', 'device_id', 'device__name', 'signal_name',
+                         'device__location__name', 'device__primary_ip_address'))
+    out = []
     position = defaultdict(int)
-    for pk, device_id, name, signal in rows:
+    for pk, device_id, name, signal, location, ip in rows:
         position[device_id] += 1
         text = io_entry(name, position[device_id], signal)
-        for field in ('aes_input', 'analog_input'):
-            out.append(((1, name.casefold(), name, 0, position[device_id], pk),
-                        Source('deviceoutput', pk, field, text)))
+        for field in fields:
+            out.append(((name.casefold(), name, device_id, position[device_id], pk),
+                        Source('deviceoutput', pk, field, text, name, ('device', device_id),
+                               location or '', ip or '')))
+    return out
+
+
+def all_sources(project):
+    """Every (output, field) pair of the project with its entry, in list order:
+    processors by name then port, then I/O devices by name then position.
+    Entries that would read the same are lengthened, or marked duplicates."""
+    out = []
+    for model, owner, prefix in ((P1Output, 'p1_processor', 'p1output'),
+                                 (GalaxyOutput, 'galaxy_processor', 'galaxyoutput')):
+        proc = f'{owner}__system_processor'
+        rows = (model.objects
+                .filter(**{f'{proc}__project': project})
+                .values_list('pk', f'{proc}__name', 'output_type', 'channel_number', 'label',
+                             f'{proc}_id', f'{proc}__location__name', f'{proc}__ip_address'))
+        for pk, name, port_type, number, label, proc_id, location, ip in rows:
+            field = PROCESSOR_FIELD.get(port_type)
+            if field:
+                out.append(((0, name.casefold(), name, FIELDS.index(field), number, pk),
+                            Source(prefix, pk, field, processor_entry(field, name, number, label),
+                                   name, ('processor', proc_id), location or '', ip or '')))
+    out += [((1,) + key, source) for key, source in io_sources(project, ('aes_input', 'analog_input'))]
     out.sort(key=lambda item: item[0])
-    return [source for _, source in out]
+    return S.disambiguate([source for _, source in out])
 
 
 def _max_length(field):
@@ -100,11 +102,14 @@ def picker(project, sources=None):
     """{field: {entry text: Source}}, every entry naming exactly one output
     and short enough to store, in list order."""
     sources = all_sources(project) if sources is None else sources
-    seen = defaultdict(lambda: defaultdict(list))
-    for source in sources:
-        seen[source.field][source.text].append(source)
-    return {field: {text: found[0] for text, found in seen[field].items()
-                    if len(found) == 1 and len(text) <= _max_length(field)}
+    entries = S.picker(sources, _max_length)
+    return {field: entries.get(field, {}) for field in FIELDS}
+
+
+def listing(sources):
+    """{field: [entry text]} for the rack view's datalists: every entry once,
+    duplicates included (they link nothing, but nothing vanishes)."""
+    return {field: [s.text for s in S.listing(sources, field, _max_length(field))]
             for field in FIELDS}
 
 
@@ -148,23 +153,25 @@ def unlink(channel, field):
                               transport=FIELD_TRANSPORT[field]).delete()
 
 
-def refresh_linked_text(project, outputs):
-    """Rewrite the text of every amp input linked to one of ``outputs``
-    ([(model name, pk)]) to that output's entry as it reads now."""
-    by_model = defaultdict(list)
-    for model, pk in outputs:
-        by_model[model].append(pk)
-    conns = []
-    for model, pks in by_model.items():
-        conns += Connection.objects.filter(from_ct=_ct(SOURCE_MODELS[model]), from_id__in=pks)
-    if not conns:
+def rewrite(project, rows):
+    """Bring linked amp inputs' text in line with their source's entry.
+    ``rows``: the project's Connections as (from ct, from id, to ct, to id,
+    transport). Returns how many fields changed."""
+    amp_ct = _ct(AmpChannel).pk
+    rows = [r for r in rows if r[2] == amp_ct and r[4] in TRANSPORT_FIELD]
+    if not rows:
         return 0
-    text = {(s.model, s.pk, s.field): s.text for s in all_sources(project)}
+    text = {(_ct(SOURCE_MODELS[s.model]).pk, s.pk, s.field): s.text
+            for s in all_sources(project)}
+    current = {pk: dict(zip(FIELDS, vals)) for pk, *vals in AmpChannel.objects.filter(
+        pk__in={r[3] for r in rows}).values_list('pk', *FIELDS)}
     changed = 0
-    for conn in conns:
-        field = TRANSPORT_FIELD.get(conn.transport)
-        new = text.get((conn.from_ct.model, conn.from_id, field))
-        if field and new is not None:
-            changed += AmpChannel.objects.filter(pk=conn.to_id).exclude(**{field: new}).update(
-                **{field: new[:_max_length(field)]})
+    for from_ct, from_id, _, to_id, transport in rows:
+        field = TRANSPORT_FIELD[transport]
+        new = text.get((from_ct, from_id, field))
+        if new is None or to_id not in current:
+            continue
+        new = new[:_max_length(field)]
+        if current[to_id][field] != new:
+            changed += AmpChannel.objects.filter(pk=to_id).update(**{field: new})
     return changed

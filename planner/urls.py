@@ -295,6 +295,10 @@ urlpatterns = [
     # Issue #27: inline edit on the unified rack page.
     path('api/amp/<int:amp_id>/inline-update/', views.amp_inline_update, name='amp_inline_update'),
     path('api/amp-channel/<int:channel_id>/inline-update/', views.amp_channel_inline_update, name='amp_channel_inline_update'),
+    path('api/p1-input/<int:input_id>/unlink/', views.processor_input_unlink,
+         {'kind': 'p1input'}, name='p1_input_unlink'),
+    path('api/galaxy-input/<int:input_id>/unlink/', views.processor_input_unlink,
+         {'kind': 'galaxyinput'}, name='galaxy_input_unlink'),
     path('api/amp/inline-create/', views.amp_inline_create, name='amp_inline_create'),
     # Issue #36: one-click mic delete inside the MicSession admin inline.
     path('api/mic-assignment/<int:mic_id>/delete/', views.mic_assignment_delete, name='mic_assignment_delete'),

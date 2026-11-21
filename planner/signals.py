@@ -3,6 +3,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from .models import (
     Project, ProjectMember, UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
@@ -223,60 +224,64 @@ def unlink_device_outputs_on_delete(sender, instance, **kwargs):
      .update(content_type=None, object_id=None))
 
 
-# -- Amp input links (wiring diagram, PR 2b-2) --------------------------------
-# A linked amp input's text is a copy of its source's datalist entry, which
-# names the output's label, port and device. Renaming any of those rewrites
-# the copy; an I/O output added or deleted renumbers the device's outputs.
-# A new row has no links yet, so a create costs nothing.
+# -- Input picker links (wiring diagram, PR 2b-2 / 2b-3) ------------------------
+# A linked amp or processor input's text is a copy of its source's datalist
+# entry, which names the output's label, port, device, and -- when two
+# entries would otherwise read the same -- its location or IP. Saving or
+# deleting any of those can change some entry, so each tells
+# ``sources.changed``, which rewrites what no longer matches. With nothing
+# linked in the project that is one query. A console bus renamed also renames
+# the I/O outputs linked to it by ``.update()`` (above), which sends no
+# signal: its own receiver here covers them, so it must stay below that one.
 
-def _refresh_amp_inputs(project, outputs):
-    from planner.connections.amp_sources import refresh_linked_text
-    if project is not None and outputs:
-        refresh_linked_text(project, outputs)
+def _changed(project_id):
+    from planner.connections.sources import changed
+    changed(project_id)
 
 
-def _device_outputs(device):
-    return [('deviceoutput', pk) for pk in device.outputs.values_list('pk', flat=True)]
+def _owner_project(get):
+    try:
+        return get()
+    except ObjectDoesNotExist:      # deleted along with its owner
+        return None
 
 
 @receiver(post_save, sender='planner.P1Output')
-def p1_output_saved(sender, instance, created, **kwargs):
-    if not created:
-        _refresh_amp_inputs(instance.p1_processor.system_processor.project,
-                            [('p1output', instance.pk)])
+@receiver(post_delete, sender='planner.P1Output')
+def p1_output_changed(sender, instance, **kwargs):
+    _changed(_owner_project(lambda: instance.p1_processor.system_processor.project_id))
 
 
 @receiver(post_save, sender='planner.GalaxyOutput')
-def galaxy_output_saved(sender, instance, created, **kwargs):
-    if not created:
-        _refresh_amp_inputs(instance.galaxy_processor.system_processor.project,
-                            [('galaxyoutput', instance.pk)])
+@receiver(post_delete, sender='planner.GalaxyOutput')
+def galaxy_output_changed(sender, instance, **kwargs):
+    _changed(_owner_project(lambda: instance.galaxy_processor.system_processor.project_id))
 
 
 @receiver(post_save, sender=DeviceOutput)
 @receiver(post_delete, sender=DeviceOutput)
 def device_output_changed(sender, instance, **kwargs):
     # Any output saved, added or deleted can renumber the device's others.
-    from planner.models import Device
-    device = Device.objects.filter(pk=instance.device_id).first()   # gone: deleted with it
-    if device is not None:
-        _refresh_amp_inputs(device.project, _device_outputs(device))
+    _changed(_owner_project(lambda: instance.device.project_id))
 
 
-@receiver(post_save, sender='planner.SystemProcessor')
-def system_processor_saved(sender, instance, created, **kwargs):
-    if created:
-        return
-    # By query, not instance.p1_config: a config can be attached unsaved.
-    from planner.models import GalaxyOutput, P1Output
-    outputs = [('p1output', pk) for pk in P1Output.objects.filter(
-        p1_processor__system_processor=instance).values_list('pk', flat=True)]
-    outputs += [('galaxyoutput', pk) for pk in GalaxyOutput.objects.filter(
-        galaxy_processor__system_processor=instance).values_list('pk', flat=True)]
-    _refresh_amp_inputs(instance.project, outputs)
+@receiver(post_save, sender=ConsoleAuxOutput)
+@receiver(post_save, sender=ConsoleMatrixOutput)
+@receiver(post_save, sender=ConsoleStereoOutput)
+@receiver(post_delete, sender=ConsoleAuxOutput)
+@receiver(post_delete, sender=ConsoleMatrixOutput)
+@receiver(post_delete, sender=ConsoleStereoOutput)
+def console_bus_changed(sender, instance, raw=False, **kwargs):
+    if not raw:
+        _changed(_owner_project(lambda: instance.console.project_id))
 
 
 @receiver(post_save, sender='planner.Device')
-def device_saved(sender, instance, created, **kwargs):
-    if not created:
-        _refresh_amp_inputs(instance.project, _device_outputs(instance))
+@receiver(post_delete, sender='planner.Device')
+@receiver(post_save, sender='planner.SystemProcessor')
+@receiver(post_delete, sender='planner.SystemProcessor')
+@receiver(post_save, sender='planner.Console')
+@receiver(post_delete, sender='planner.Console')
+@receiver(post_save, sender='planner.Location')
+def picker_owner_changed(sender, instance, **kwargs):
+    _changed(instance.project_id)

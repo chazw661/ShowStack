@@ -172,6 +172,13 @@ class BaseEquipmentAdmin(BaseAdmin):
         return {name: action for name, action in actions.items()
                 if getattr(action[0], 'viewer_ok', False)}
 
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        # One save can add or rename many outputs (a device's 32, a processor's
+        # 24): rewrite linked input text once, after it commits (PR 2b-3).
+        from planner.connections.sources import batched
+        with batched():
+            return super().changeform_view(request, object_id, form_url, extra_context)
+
 
     def _get_user_role_for_project(self, request, project):
         """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
@@ -2448,12 +2455,12 @@ class AmpAdmin(BaseEquipmentAdmin):
             # PR 2b-2: the input fields' datalists are the picker. Each lists
             # every output that can feed it, one entry per output, naming its
             # device; saving an entry links the input (connections.amp_sources).
+            # Entries alike are lengthened; a "(duplicate device)" one is
+            # listed but links nothing (PR 2b-3).
             from planner.connections import amp_sources
             from planner.utils.script_json import script_json
             sources = amp_sources.all_sources(request.current_project)
-            entries = amp_sources.picker(request.current_project, sources)
-            extra_context['input_sources_json'] = script_json(
-                {f: list(entries[f]) for f in amp_sources.FIELDS})
+            extra_context['input_sources_json'] = script_json(amp_sources.listing(sources))
             channels = [ch for group in active_locations for card in group['cards']
                         for ch in card['channels']]
             # The link button's tooltip names the source, as its entry reads now.
@@ -2909,9 +2916,61 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
 
 
 
+# ========== P1 / Galaxy input pickers (wiring diagram, PR 2b-3) ==========
+
+class ProcessorInputFormSet(forms.models.BaseInlineFormSet):
+    """Carries the page's picker: ``picker`` (the datalist's Sources, built
+    once per page) and ``linked`` ({input pk: entry it is linked to})."""
+    picker = ()
+    linked = {}
+    can_edit = False
+
+    def _construct_form(self, i, **kwargs):
+        form = super()._construct_form(i, **kwargs)
+        form.linked = self.linked.get(form.instance.pk, '') if form.instance.pk else ''
+        form.pickable = form.instance.input_type in ('AES', 'ANALOG')
+        return form
+
+
+class ProcessorInputPickerMixin:
+    formset = ProcessorInputFormSet
+
+    def get_formset(self, request, obj=None, **kwargs):
+        from planner.connections import processor_sources
+        formset = super().get_formset(request, obj, **kwargs)
+        project = self._inline_project(request, obj)
+        sources = processor_sources.all_sources(project) if project else []
+        formset.picker = processor_sources.listing(sources)
+        formset.can_edit = bool(project) and can_edit_project(request.user, project)
+        formset.linked = {}
+        if obj is not None:
+            named = {s.key: s.text for s in sources}
+            links = processor_sources.links_for(list(obj.inputs.all()))
+            formset.linked = {pk: named.get((c.from_ct.model, c.from_id)) or 'its source'
+                              for (_, pk), c in links.items()}
+        return formset
+
+
+class ProcessorInputLinkAdminMixin:
+    def save_formset(self, request, form, formset, change):
+        super().save_formset(request, form, formset, change)
+        if formset.model not in (P1Input, GalaxyInput):
+            return
+        # PR 2b-3: an AES / Analog input whose text is exactly one datalist
+        # entry is linked to that output; edited to anything else, unlinked.
+        from planner.connections import processor_sources
+        entries = None
+        for f in formset.forms:
+            if 'label' in f.changed_data and f.instance.pk and f.instance.input_type in (
+                    processor_sources.INPUT_TRANSPORT):
+                if entries is None:
+                    entries = processor_sources.picker(processor_sources.owner_project(f.instance))
+                processor_sources.link_from_text(f.instance, entries)
+
+
 # ========== P1 Processor Admin ==========
 
-class P1InputInline(ProjectRoleInlineMixin, admin.TabularInline):
+class P1InputInline(ProcessorInputPickerMixin, ProjectRoleInlineMixin, admin.TabularInline):
     model = P1Input
     form = P1InputInlineForm
     extra = 0
@@ -2952,7 +3011,7 @@ except admin.sites.NotRegistered:
     pass
 
 
-class P1ProcessorAdmin(BaseEquipmentAdmin):
+class P1ProcessorAdmin(ProcessorInputLinkAdminMixin, BaseEquipmentAdmin):
     project_scoped_fks = {'system_processor': 'project'}
     form = P1ProcessorAdminForm
     change_form_template = 'admin/planner/p1processor/change_form.html'
@@ -3206,7 +3265,7 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
 
         # ========== GALAXY Processor Admin ==========
 
-class GalaxyInputInline(ProjectRoleInlineMixin, admin.TabularInline):
+class GalaxyInputInline(ProcessorInputPickerMixin, ProjectRoleInlineMixin, admin.TabularInline):
     model = GalaxyInput
     form = GalaxyInputInlineForm
     extra = 0
@@ -3241,7 +3300,7 @@ class GalaxyOutputInline(ProjectRoleInlineMixin, admin.TabularInline):
 
 
 
-class GalaxyProcessorAdmin(BaseEquipmentAdmin):
+class GalaxyProcessorAdmin(ProcessorInputLinkAdminMixin, BaseEquipmentAdmin):
     project_scoped_fks = {'system_processor': 'project'}
     form = GalaxyProcessorAdminForm
     change_form_template = 'admin/planner/galaxyprocessor/change_form.html'

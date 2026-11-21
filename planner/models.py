@@ -87,7 +87,9 @@ class Project(models.Model):
      
     
         
-        with transaction.atomic():
+        # A copy adds outputs one by one: rewrite linked text once, at the end.
+        from planner.connections.sources import batched
+        with batched(), transaction.atomic():
             # Create new project
             new_project = Project.objects.create(
                 name=new_name,
@@ -113,7 +115,7 @@ class Project(models.Model):
             console_map = {}
             amp_map = {}
             array_map = {}              # PA cable runs link arrays by these
-            port_map = {}               # (model, old pk) -> new row: amp input links
+            port_map = {}               # (model, old pk) -> new row: input picker links
 
             # 1. Duplicate Locations (needed for other models)
             for location in self.location_set.all():
@@ -165,7 +167,7 @@ class Project(models.Model):
                 
                 # Duplicate Console Aux Outputs
                 for aux in console.consoleauxoutput_set.all():
-                    ConsoleAuxOutput.objects.create(
+                    port_map[('consoleauxoutput', aux.pk)] = ConsoleAuxOutput.objects.create(
                         console=new_console,
                         dante_number=aux.dante_number,
                         aux_number=aux.aux_number,
@@ -178,7 +180,7 @@ class Project(models.Model):
                 
                 # Duplicate Console Matrix Outputs
                 for matrix in console.consolematrixoutput_set.all():
-                    ConsoleMatrixOutput.objects.create(
+                    port_map[('consolematrixoutput', matrix.pk)] = ConsoleMatrixOutput.objects.create(
                         console=new_console,
                         dante_number=matrix.dante_number,
                         matrix_number=matrix.matrix_number,
@@ -190,7 +192,7 @@ class Project(models.Model):
                 
                 # Duplicate Console Stereo Outputs
                 for stereo in console.consolestereooutput_set.all():
-                    ConsoleStereoOutput.objects.create(
+                    port_map[('consolestereooutput', stereo.pk)] = ConsoleStereoOutput.objects.create(
                         console=new_console,
                         stereo_type=stereo.stereo_type,
                         name=stereo.name,
@@ -651,7 +653,7 @@ class Project(models.Model):
                     
                     # Now duplicate P1Inputs from original
                     for p1_input in p1_config.inputs.all():
-                        P1Input.objects.create(
+                        port_map[('p1input', p1_input.pk)] = P1Input.objects.create(
                             p1_processor=new_p1,
                             input_type=p1_input.input_type,
                             channel_number=p1_input.channel_number,
@@ -678,7 +680,7 @@ class Project(models.Model):
                     
                     # Duplicate GalaxyInputs
                     for galaxy_input in galaxy_config.inputs.all():
-                        GalaxyInput.objects.create(
+                        port_map[('galaxyinput', galaxy_input.pk)] = GalaxyInput.objects.create(
                             galaxy_processor=new_galaxy,
                             input_type=galaxy_input.input_type,
                             channel_number=galaxy_input.channel_number,
@@ -765,7 +767,7 @@ class Project(models.Model):
                         day4_status=task.day4_status
                     )
             
-            # Amp input links, onto the copy's own outputs and channels.
+            # Input picker links, onto the copy's own outputs and inputs.
             for conn in Connection.objects.filter(project=self).select_related('from_ct', 'to_ct'):
                 source = port_map.get((conn.from_ct.model, conn.from_id))
                 channel = port_map.get((conn.to_ct.model, conn.to_id))
@@ -1203,6 +1205,10 @@ class ConsoleAuxOutput(models.Model):
         help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
+    # Processor inputs linked to this output (wiring diagram, PR 2b-3).
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
+
     def __str__(self):
         return f"Aux {self.aux_number} - {self.name}"
 
@@ -1227,6 +1233,10 @@ class ConsoleMatrixOutput(models.Model):
         help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
+    # Processor inputs linked to this output (wiring diagram, PR 2b-3).
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
+
     def __str__(self):
         return f"Matrix {self.matrix_number} - {self.name}"
     
@@ -1247,6 +1257,10 @@ class ConsoleStereoOutput(models.Model):
         verbose_name="Include in multitrack",
         help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
+
+    # Processor inputs linked to this output (wiring diagram, PR 2b-3).
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
 
     def __str__(self):
         return f"{self.get_stereo_type_display()} - {self.name}"
@@ -2566,7 +2580,9 @@ class P1Processor(models.Model):
         
         # Only create channels if this is a new P1 processor AND no channels exist yet
         if is_new and not self.inputs.exists() and not self.outputs.exists():
-            self._create_default_channels()
+            from planner.connections.sources import batched
+            with batched():         # 24 new outputs: one link-text rewrite
+                self._create_default_channels()
     
     def _create_default_channels(self):
         """Create default P1 channels based on standard configuration"""
@@ -2648,6 +2664,9 @@ class P1Input(models.Model):
     input_type = models.CharField(max_length=10, choices=INPUT_TYPES)
     channel_number = models.PositiveIntegerField()
     label = models.CharField(max_length=100, blank=True, null=True, help_text="Channel label/name")
+    # The output this input is linked to (wiring diagram, PR 2b-3).
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
 
     class Meta:
         unique_together = ['p1_processor', 'input_type', 'channel_number']
@@ -2738,6 +2757,9 @@ class GalaxyInput(models.Model):
     input_type = models.CharField(max_length=10, choices=INPUT_TYPE_CHOICES)
     channel_number = models.PositiveIntegerField()
     label = models.CharField(max_length=100, blank=True, help_text="Channel label")
+    # The output this input is linked to (wiring diagram, PR 2b-3).
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
 
     class Meta:
         ordering = ['input_type', 'channel_number']
@@ -2791,23 +2813,42 @@ class GalaxyOutput(models.Model):
 class Connection(models.Model):
     """A confirmed link from one port to another (wiring diagram, PR 2b).
 
-    Both ends are generic, so every hop can be stored in one table. For now
-    one use is allowed: an amp channel's input linked to the output feeding
-    it (``to`` = AmpChannel; ``from`` = P1Output / GalaxyOutput /
-    DeviceOutput), at most one per channel and transport. ``save()`` refuses
-    anything else, an end in another project, and a transport the source
-    cannot carry. The ends' GenericRelations delete a row with either end.
+    Both ends are generic, so every hop can be stored in one table. Two uses
+    are allowed (``PAIRS``): an amp channel's input linked to the output
+    feeding it (``to`` = AmpChannel; ``from`` = P1Output / GalaxyOutput /
+    DeviceOutput, PR 2b-2), and a P1 / Galaxy AES or Analog input linked to
+    an I/O output or a console Aux / Matrix / Stereo output (PR 2b-3), at
+    most one per input and transport. ``save()`` refuses anything else, an
+    end in another project or on a template console, and a transport the
+    ends cannot carry. The ends' GenericRelations delete a row with either end.
     """
     TRANSPORT_CHOICES = [('analog', 'Analog'), ('aes', 'AES'), ('dante', 'Dante'),
                          ('avb', 'AVB'), ('madi', 'MADI'), ('speaker', 'Speaker')]
     STATUS_CHOICES = [('confirmed', 'Confirmed')]
 
-    # from model -> (path to its project id, transports it can carry)
+    # model -> (path to its project id, the field naming its port type or
+    # None, transports it can carry when that is fixed)
     SOURCES = {
-        'p1output': ('p1_processor__system_processor__project_id', None),
-        'galaxyoutput': ('galaxy_processor__system_processor__project_id', None),
-        'deviceoutput': ('device__project_id', {'aes', 'analog'}),
+        'p1output': ('p1_processor__system_processor__project_id', 'output_type', None),
+        'galaxyoutput': ('galaxy_processor__system_processor__project_id', 'output_type', None),
+        'deviceoutput': ('device__project_id', None, {'aes', 'analog'}),
+        'consoleauxoutput': ('console__project_id', None, {'aes', 'analog'}),
+        'consolematrixoutput': ('console__project_id', None, {'aes', 'analog'}),
+        'consolestereooutput': ('console__project_id', None, {'aes', 'analog'}),
     }
+    TARGETS = {
+        'ampchannel': ('amp__project_id', None, {'avb', 'aes', 'analog'}),
+        'p1input': ('p1_processor__system_processor__project_id', 'input_type', None),
+        'galaxyinput': ('galaxy_processor__system_processor__project_id', 'input_type', None),
+    }
+    PAIRS = {
+        'ampchannel': {'p1output', 'galaxyoutput', 'deviceoutput'},
+        'p1input': {'deviceoutput', 'consoleauxoutput', 'consolematrixoutput',
+                    'consolestereooutput'},
+        'galaxyinput': {'deviceoutput', 'consoleauxoutput', 'consolematrixoutput',
+                        'consolestereooutput'},
+    }
+    CONSOLE_SOURCES = {'consoleauxoutput', 'consolematrixoutput', 'consolestereooutput'}
     PROCESSOR_TRANSPORT = {'AVB': 'avb', 'AES': 'aes', 'ANALOG': 'analog'}
 
     project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='connections')
@@ -2839,28 +2880,38 @@ class Connection(models.Model):
     def __str__(self):
         return f'{self.from_ct.model}:{self.from_id} → {self.to_ct.model}:{self.to_id} ({self.transport})'
 
+    def _end(self, ct_id, pk, table):
+        """(model name, project id, transports) of one end, or raise."""
+        from django.core.exceptions import ValidationError
+        ct = ContentType.objects.get_for_id(ct_id) if ct_id else None
+        if ct is None or ct.app_label != 'planner' or ct.model not in table:
+            return None
+        path, type_field, transports = table[ct.model]
+        fields = [path] + ([type_field] if type_field else [])
+        if ct.model in self.CONSOLE_SOURCES:
+            fields.append('console__is_template')
+        row = ct.model_class().objects.filter(pk=pk).values(*fields).first()
+        if row is None:
+            raise ValidationError('A connection end does not exist.')
+        if row.get('console__is_template'):
+            raise ValidationError('A connection cannot come from a console template.')
+        if type_field:
+            transports = {self.PROCESSOR_TRANSPORT.get(row[type_field])}
+        return ct.model, row[path], transports
+
     def check_ends(self):
         """Raise ValidationError unless this is a link the module allows."""
         from django.core.exceptions import ValidationError
-        if self.to_ct_id != ContentType.objects.get_for_model(AmpChannel).pk:
-            raise ValidationError('A connection goes to an amp channel.')
-        source = self.SOURCES.get(self.from_ct.model if self.from_ct_id else '')
-        if source is None or self.from_ct.app_label != 'planner':
-            raise ValidationError('A connection comes from a processor or I/O output.')
-        path, transports = source
-        model = self.from_ct.model_class()
-        row = (model.objects.filter(pk=self.from_id)
-               .values(path, *(['output_type'] if transports is None else [])).first())
-        to_project = (AmpChannel.objects.filter(pk=self.to_id)
-                      .values_list('amp__project_id', flat=True).first())
-        if row is None or to_project is None:
-            raise ValidationError('A connection end does not exist.')
-        if row[path] != self.project_id or to_project != self.project_id:
+        to = self._end(self.to_ct_id, self.to_id, self.TARGETS)
+        if to is None:
+            raise ValidationError('A connection goes to an amp channel or a processor input.')
+        source = self._end(self.from_ct_id, self.from_id, self.SOURCES)
+        if source is None or source[0] not in self.PAIRS[to[0]]:
+            raise ValidationError(f'A {to[0]} cannot be fed from that output.')
+        if source[1] != self.project_id or to[1] != self.project_id:
             raise ValidationError('Both ends of a connection must be in its project.')
-        allowed = transports if transports is not None else {
-            self.PROCESSOR_TRANSPORT.get(row['output_type'])}
-        if self.transport not in allowed:
-            raise ValidationError(f'{self.from_ct.model} cannot carry {self.transport}.')
+        if self.transport not in source[2] or self.transport not in to[2]:
+            raise ValidationError(f'{source[0]} → {to[0]} cannot carry {self.transport}.')
         if self.status not in dict(self.STATUS_CHOICES):
             raise ValidationError(f'Unknown status {self.status!r}.')
 
