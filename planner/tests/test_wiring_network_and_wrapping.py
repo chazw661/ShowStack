@@ -146,10 +146,12 @@ class LongShow(ConnectionFixtures):
         self.device_output(self.box, 3, 'Fill', bus=mtx)
         # every other bus to every other output: one group far too wide for a line
         self.far = self.device('Far Box')
-        for n in range(1, 50, 2):
-            bus = ConsoleAuxOutput.objects.create(console=self.desk, aux_number=str(n + 10),
-                                                  name=f'Mix {n}')
-            self.device_output(self.far, n, f'Mix {n}', bus=bus)
+        self.far_2 = self.device('Far Box 2')
+        for far, base in ((self.far, 10), (self.far_2, 100)):
+            for n in range(1, 50, 2):
+                bus = ConsoleAuxOutput.objects.create(console=self.desk, aux_number=str(n + base),
+                                                      name=f'Mix {n}')
+                self.device_output(far, n, f'Mix {n}', bus=bus)
         self.amp_ = self.amp('SL Amp', rack='Stage Left Amplifier Rack Behind The Scrim Wall')
         self.k2 = self.array(self.prediction(), 'K2 Left Main Hang Downstage')
         self.linked_cable(self.amp_, self.k2, label=self.zone('HL'), count=2, length=100)
@@ -176,9 +178,45 @@ class NothingCutShortTests(LongShow, TestCase):
     def test_a_group_too_wide_for_a_line_becomes_a_key(self):
         _, lay = self.draw()
         route = next(r for r in lay.routes if r.to_node == f'device:{self.far.pk}')
+        other = next(r for r in lay.routes if r.to_node == f'device:{self.far_2.pk}')
         self.assertEqual(route.lines, [f'[{route.key}]'])
-        self.assertEqual(lay.keys, [(route.key, route.id)])
+        self.assertEqual(lay.keys, sorted([(route.key, route.id), (other.key, other.id)]))
         self.assertIn('Aux 11, 13', route.label_full)      # the tooltip keeps it all
+
+    def test_a_key_is_a_badge_on_the_line_next_to_its_source_box(self):
+        _, lay = self.draw()
+        desk = next(b for b in lay.boxes if b.node == f'console:{self.desk.pk}')
+        keyed = [r for r in lay.routes if r.key]
+        self.assertEqual(len(keyed), 2)
+        for route in keyed:
+            x0, y0, x1, y1 = route.badge
+            line_y = route.points[0][1]
+            self.assertEqual(x0, desk.x + desk.w + L.LABEL_PAD)            # next to the box
+            self.assertAlmostEqual((y0 + y1) / 2, line_y)                   # centred on the line
+            self.assertAlmostEqual(x1 - x0, L.key_width(route.key))
+            self.assertLess(x1, route.points[1][0])         # before its first bend or its target
+        drawn = svg.render(lay)
+        for route in keyed:
+            self.assertRegex(drawn, rf'<g class="wd-key"><rect [^>]*rx="3"/>'
+                                    rf'<text data-key="{route.key}" [^>]*>\[{route.key}\]</text></g>')
+        self.assertIn('.wd-key text { font: 700 11px', drawn)               # bold
+        # Drawn after the line, so the badge's white fill sits over it.
+        link = re.search(rf'<g class="wd-link" data-edge="{keyed[0].id}">.*?</g></g>', drawn).group()
+        self.assertLess(link.index('class="wd-edge'), link.index('class="wd-key"'))
+
+    def test_a_badge_clears_the_labels_beside_it(self):
+        # [1], [2] and a two-line label leave one box one under another.
+        _, lay = self.draw()
+        from_desk = [r for r in lay.routes if r.from_node == f'console:{self.desk.pk}']
+        self.assertEqual(sorted(bool(r.key) for r in from_desk), [False, True, True])
+        for route in (r for r in from_desk if r.key):
+            _, top, _, bottom = route.badge
+            for other in from_desk:
+                if other is route:
+                    continue
+                for _, y0, _, y1 in other.line_boxes():
+                    gap = max(y0 - bottom, top - y1)
+                    self.assertGreaterEqual(gap, 3, f'[{route.key}] / {other.lines}')
 
     def test_long_titles_wrap(self):
         _, lay = self.draw()
@@ -243,11 +281,23 @@ class ConnectionsTableTests(LongShow, TestCase):
         self.assertEqual(drawn, rows)
         for key in drawn:
             self.assertIn(f'>[{key}]</text>', svg)
-            self.assertIn(f'<td class="k">[{key}]</td>', html)
-        row = response.context['connections'][0]
+            self.assertIn(f'<td class="k"><span class="wd-keybadge">[{key}]</span></td>', html)
+        row = next(r for r in response.context['connections'] if r['to'].startswith('Far Box ·'))
         self.assertTrue(row['from'].startswith(f'{self.LONG_NAME} · Aux 11, 13'))
         self.assertEqual(row['to'], 'Far Box · Out 1–25')
         self.assertEqual(row['cable'], 'Not known')
+
+    def test_the_page_prints_the_diagram_whole_with_the_keys_boxed(self):
+        response = self.client.get(reverse('planner:wiring_diagram'))
+        html = response.content.decode()
+        css = html[html.index('@media print'):]
+        css = css[:css.index('</style>')]
+        for rule in ('.wd-scroll { overflow: visible; max-height: none;',
+                     '.wd-scroll svg { width: 100%; height: auto; }',
+                     '.wd-keybadge { color: #000; border-color: #000; }',
+                     '.wd-tabs, .wd-bar { display: none !important; }'):
+            self.assertIn(rule, css)
+        self.assertContains(response, '<p class="wd-print-tab">Overview</p>')
 
     def test_each_tab_has_its_own_table(self):
         response = self.client.get(reverse('planner:wiring_diagram'), {'view': 'speakers'})
