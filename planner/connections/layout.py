@@ -46,7 +46,9 @@ Nothing is cut short. A label is drawn one line per port group or PA run
 (the graph's ``label_lines``), stacked above its line; the out-slot it
 starts from grows to hold them, so labels never overlap each other or a
 track. A label with a line wider than ``label_max``, or more than
-LABEL_LINES_MAX lines, is drawn as a key, "[1]", and listed in the page's
+LABEL_LINES_MAX lines, is drawn as a key: a small boxed "[1]" badge on the
+line itself, just right of the source box, in a row tall enough (KEY_ROW)
+that the badge clears its neighbours; it is listed in the page's
 Connections table (``Layout.keys``). Box titles, subtitles, extra lines,
 slot names and group headers wrap at BOX_W; a wrapped slot is taller.
 """
@@ -80,6 +82,11 @@ SLOT_CHAR_W = 5.9   # 10px slot names
 TEXT_W = BOX_W - 16  # inside a box
 LABEL_MAX = 300
 LABEL_LINES_MAX = 6
+KEY_CHAR_W = 7.2    # bold 11px key text
+KEY_PAD = 4         # either side of the key text, inside its badge
+KEY_H = 14          # the badge's height, centred on the line
+KEY_LINE = 11       # an out-row holding a badge: its line this far below the row's top
+KEY_ROW = 26        # ... and the row this tall, so 4px clear the next row's label
 SWEEPS = 4
 
 NO_LOCATION = 'No location'
@@ -110,6 +117,7 @@ class Box:
     slot_lines: list = field(default_factory=list)  # each slot's label, wrapped
     in_h: list = field(default_factory=list)    # each input row's height
     out_h: list = field(default_factory=list)   # each output row's height (its label's lines)
+    out_line: list = field(default_factory=list)  # where in its row each output's line runs
 
     @property
     def dummy(self):
@@ -146,8 +154,10 @@ class Box:
         return self.y + self.head + sum(_rows(self.in_h, i)) + SLOT / 2
 
     def out_row_y(self, i):
-        """Output row ``i``'s line, under its label's lines."""
-        return self.y + self.head + sum(_rows(self.out_h, i + 1)) - SLOT / 2
+        """Output row ``i``'s line: under its label's lines, or through the
+        middle of a key badge's row."""
+        line = self.out_line[i] if i < len(self.out_line) else SLOT / 2
+        return self.y + self.head + sum(_rows(self.out_h, i)) + line
 
     def slot_y(self, segment):
         if self.dummy:
@@ -199,8 +209,19 @@ class Route:
     lines: list = field(default_factory=list)   # drawn, top to bottom; the last at label_y
     key: int | None = None  # drawn as "[key]", listed in the Connections table
 
+    @property
+    def badge(self):
+        """(x0, y0, x1, y1) of a key's badge, centred on the first run; else None."""
+        if not self.key:
+            return None
+        y = self.points[0][1]
+        return (self.label_x, y - KEY_H / 2, self.label_x + key_width(self.key), y + KEY_H / 2)
+
     def line_boxes(self):
-        """[(x0, y0, x1, y1)] around each drawn line, for overlap checks."""
+        """[(x0, y0, x1, y1)] around each drawn line (a key: its badge), for
+        overlap checks."""
+        if self.key:
+            return [self.badge]
         n = len(self.lines)
         return [(self.label_x, y - 9, self.label_x + text_width(line), y + 3)
                 for i, line in enumerate(self.lines)
@@ -225,6 +246,11 @@ class Layout:
 
 def text_width(text, char_w=CHAR_W):
     return len(text) * char_w
+
+
+def key_width(key):
+    """A key badge's width."""
+    return text_width(f'[{key}]', KEY_CHAR_W) + 2 * KEY_PAD
 
 
 def wrap(text, width, char_w=CHAR_W):
@@ -437,8 +463,16 @@ class _Builder:
             box.slot_lines = [wrap(label, TEXT_W, SLOT_CHAR_W) for label in box.slots]
             box.in_h = ([SLOT + SLOT_LH * (len(lines) - 1) for lines in box.slot_lines]
                         or [SLOT] * len(box.ins))
-            box.out_h = [SLOT + LABEL_LH * (max(len(self.drawn_lines[s.edge['id']]), 1) - 1)
-                         if s.first else SLOT for s in box.outs]
+            box.out_h, box.out_line = [], []
+            for seg in box.outs:
+                if seg.first and seg.edge['id'] in self.keys:
+                    h, line = KEY_ROW, KEY_LINE
+                else:
+                    lines = len(self.drawn_lines[seg.edge['id']]) if seg.first else 1
+                    h = SLOT + LABEL_LH * (max(lines, 1) - 1)
+                    line = h - SLOT / 2
+                box.out_h.append(h)
+                box.out_line.append(line)
             box.h = box.head + max(sum(box.in_h), sum(box.out_h), SLOT) + PAD
 
     def name_slots(self, box, named):
@@ -494,8 +528,9 @@ class _Builder:
             if c == len(self.columns) - 1:
                 break
             gap = [s for s in self.segments if s.from_box.column == c]
-            labels = [text_width(line) for s in gap if s.first
-                      for line in self.drawn_lines[s.edge['id']]]
+            labels = [key_width(self.keys[s.edge['id']]) if s.edge['id'] in self.keys
+                      else text_width(line)
+                      for s in gap if s.first for line in self.drawn_lines[s.edge['id']]]
             label_zone = (max(labels) + 2 * LABEL_PAD) if labels else LABEL_PAD
             bends = sorted((s for s in gap if abs(s.from_box.slot_y(s) - s.to_box.slot_y(s)) > 0.5),
                            key=lambda s: (s.from_box.slot_y(s), s.to_box.slot_y(s)))
@@ -569,12 +604,14 @@ class _Builder:
                            (seg.track_x, y1), (seg.to_box.x, y1)]
             full = self.label(edge)
             y0 = points[0][1]
+            key = self.keys.get(edge['id'])
             out.append(Route(
                 id=edge['id'], from_node=edge['from'], to_node=edge['to'],
                 points=_simplify(points), label=full, label_full=full,
-                label_x=src.x + src.w + LABEL_PAD, label_y=y0 - 4,
+                # a key's text is centred in its badge on the line; a label sits above it
+                label_x=src.x + src.w + LABEL_PAD, label_y=y0 + 4 if key else y0 - 4,
                 classes=_classes(edge), question=bool(edge.get('unlinked') or edge.get('ambiguous')),
-                lines=self.drawn_lines[edge['id']], key=self.keys.get(edge['id'])))
+                lines=self.drawn_lines[edge['id']], key=key))
         return out
 
 
