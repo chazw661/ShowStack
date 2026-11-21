@@ -93,6 +93,7 @@ from dataclasses import dataclass, field
 from django.contrib.contenttypes.models import ContentType
 
 from planner.connections import endpoints as ep
+from planner.connections.panels import panel_inputs
 from planner.models import (
     Amp, AmpChannel, AmpLocation, Connection, Console, ConsoleAuxOutput,
     ConsoleMatrixOutput, ConsoleStereoOutput, Device, DeviceInput, DeviceOutput,
@@ -277,7 +278,10 @@ class ProjectIndex:
         for a in Amp.objects.filter(project_id=pid).select_related('location', 'amp_model'):
             self._add(Node(ep.node_id(ep.AMP, a.pk), ep.AMP, a.name,
                            _location(a.location, ep.AMP_LOCATION),
-                           {'model': str(a.amp_model) if a.amp_model_id else ''}))
+                           {'model': str(a.amp_model) if a.amp_model_id else '',
+                            'panel_inputs': list(panel_inputs(a.amp_model.manufacturer,
+                                                              a.amp_model.model_name))
+                            if a.amp_model_id else []}))
         for loc in AmpLocation.objects.filter(project_id=pid):
             node = self._add(Node(ep.node_id(ep.AMP_LOCATION, loc.pk), ep.AMP_LOCATION,
                                   loc.name, extra={'sort_order': loc.sort_order}))

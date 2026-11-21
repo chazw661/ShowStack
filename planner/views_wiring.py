@@ -4,7 +4,11 @@ Any project role can open it; nothing on it edits anything. The graph is
 inferred live (``connections.graph``), filtered to the tab in ``?view=``
 (``connections.tabs``), laid out by ``connections.layout`` and drawn by
 ``connections.svg``, which escapes every name. Each tab is laid out on its
-own; an unknown ``view`` is the Overview.
+own; an unknown ``view`` is the Overview. On the Overview ``?network=0``
+hides the AVB / Dante network feeds ("Show network feeds" off).
+
+A label too long to draw is a key on its line ("[1]"); the Connections
+table under the diagram lists each key's ends and cable.
 """
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
@@ -63,10 +67,43 @@ def warnings_for(graph, lay):
     return rows
 
 
+TRANSPORT_NAMES = {
+    'analog': 'Analogue', 'aes': 'AES', 'avb': 'AVB (network)', 'dante': 'Dante (network)',
+    'madi': 'MADI', 'twinlane': 'TWINLANe', 'other': 'Other',
+}
+
+
+def _end(node, ports, slot=''):
+    return ' · '.join(x for x in (node.get('label', ''), ports, slot) if x)
+
+
+def connection_rows(graph, lay):
+    """The Connections table: one row per label drawn as a key."""
+    nodes = {n['id']: n for n in graph['nodes']}
+    edges = {e['id']: e for e in graph['edges']}
+    rows = []
+    for key, edge_id in lay.keys:
+        edge = edges[edge_id]
+        to = nodes.get(edge['to'], {})
+        slot = next((s['label'] for s in to.get('slots', ()) if s['id'] == edge.get('to_slot')), '')
+        transports = edge.get('transports', ())
+        if 'speaker' in transports:
+            cable = '; '.join(edge.get('label_lines') or [edge.get('label', '')])
+        else:
+            cable = ', '.join(TRANSPORT_NAMES.get(t, t) for t in transports) or 'Not known'
+        rows.append({
+            'key': key,
+            'from': _end(nodes.get(edge['from'], {}), edge.get('from_ports', '')),
+            'to': _end(to, edge.get('to_ports', ''), slot),
+            'cable': cable,
+        })
+    return rows
+
+
 TAB_EMPTY = {
     T.DANTE: 'No console or Dante I/O device yet. Set Console connection to Dante on an '
              'I/O device page.',
-    T.ANALOG: 'No analog or AES feed and no non-Dante console link yet.',
+    T.ANALOG: 'No analogue or AES feed and no non-Dante console link yet.',
     T.SPEAKERS: 'No PA cable runs yet. Add them on the PA Cable Schedule.',
 }
 
@@ -91,6 +128,11 @@ def wiring_diagram(request):
     tab = T.tab_or_default(request.GET.get('view'))
     full = project_graph(project)
     graph = T.graph_view(full, tab)
+    network = request.GET.get('network') != '0'
+    hidden_network = 0
+    if tab == T.OVERVIEW and not network:
+        hidden_network = sum(bool(e.get('network')) for e in graph['edges'])
+        graph = T.without_network(graph)
     lay = layout(graph, **T.layout_options(tab))
     edges = graph['edges']
     tab_label = dict(T.TABS)[tab]
@@ -102,6 +144,10 @@ def wiring_diagram(request):
         'tab_empty': bool(full['nodes']) and not graph['nodes'],
         'tab_empty_text': TAB_EMPTY.get(tab, ''),
         'show_unset_legend': any(e.get('connection_unset') for e in edges),
+        'network_toggle': tab == T.OVERVIEW,
+        'network': network,
+        'hidden_network': hidden_network,
+        'connections': connection_rows(graph, lay),
         # svg.render escapes every name it draws.
         'svg': mark_safe(svg.render(lay, title=f'Wiring diagram: {project.name} — {tab_label}')),
         'warnings': warnings_for(graph, lay),

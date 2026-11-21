@@ -102,7 +102,8 @@ class WiringViewTests(WiringShow, TestCase):
         self.assertIn(f'device:{self.box.pk}#in', boxes)
         self.assertIn(f'device:{self.box.pk}#out', boxes)
         self.assertIn('unlinked:text:nowhere', boxes)
-        labels = [t.text for t in root.iter(f'{SVG_NS}text') if 'wd-label' in (t.get('class') or '')]
+        labels = [' '.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')
+                  if 'wd-label' in (t.get('class') or '')]
         self.assertIn('Out 2', labels)
         self.assertIn("HL · 2× NL 4 100'", labels)
         self.assertTrue(any(l.startswith('? Delay') for l in labels))
@@ -158,7 +159,7 @@ class WiringViewEscapesNamesTests(WiringShow, TestCase):
         titles = {t.text for t in root.iter(f'{SVG_NS}title')}
         self.assertIn(NAME, titles)
         self.assertIn(QUOTED, titles)
-        texts = [t.text or '' for t in root.iter(f'{SVG_NS}text')]
+        texts = [' '.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')]
         self.assertIn(f'? {QUOTED}', ' '.join(texts))
         # A quote in a name stays inside its attribute: the box's id reads back whole.
         self.assertIn(f'unlinked:text:{QUOTED}',

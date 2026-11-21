@@ -7,9 +7,9 @@ later 11x17 PDF draw the same picture.
 
 Seven fixed columns, signal flowing left to right:
 
-  0 I/O inputs      an I/O device's inputs box, titled with its name only
+  0 Device inputs   an I/O device's inputs box, titled with its name only
   1 Console
-  2 I/O outputs     the same device's outputs box
+  2 Device outputs  the same device's outputs box
   3 Processor       also text a console / I/O output names that matched no
                     single processor input. Hidden when there is no processor.
   4 Unlinked feeds  amp input text that names no single output ("AVB 1",
@@ -40,21 +40,33 @@ inside the box's left edge in input order, and an edge lands on its
 Routing is orthogonal: out of the source's right side, along to a vertical
 track of its own in the gap, then along into the target's left side. Every
 horizontal run goes rightward. The edge's label sits on its first run, just
-right of the source, in a label zone as wide as the gap's longest label.
+right of the source, in a label zone as wide as the gap's longest label line.
+
+Nothing is cut short. A label is drawn one line per port group or PA run
+(the graph's ``label_lines``), stacked above its line; the out-slot it
+starts from grows to hold them, so labels never overlap each other or a
+track. A label with a line wider than ``label_max``, or more than
+LABEL_LINES_MAX lines, is drawn as a key, "[1]", and listed in the page's
+Connections table (``Layout.keys``). Box titles, subtitles, extra lines,
+slot names and group headers wrap at BOX_W; a wrapped slot is taller.
 """
 from dataclasses import dataclass, field
+from functools import cached_property
 from statistics import mean
 
 IO_IN, CONSOLE, IO_OUT, PROCESSOR, FEEDS, AMP, SPEAKER = range(7)
-COLUMN_TITLES = ('I/O inputs', 'Console', 'I/O outputs', 'Processors', 'Unlinked feeds',
+COLUMN_TITLES = ('Device inputs', 'Console', 'Device outputs', 'Processors', 'Unlinked feeds',
                  'Amps', 'Speakers')
 HIDDEN_WHEN_EMPTY = (PROCESSOR, FEEDS)
 ALL_COLUMNS = tuple(range(len(COLUMN_TITLES)))
 
 BOX_W = 200
 HEAD = 34           # title + subtitle above the first port slot
-LINE_H = 13         # each extra text line under the subtitle (an IP line)
+TITLE_LH = 14       # each further line of a wrapped title
+LINE_H = 13         # each further subtitle line, and each extra line (an IP line)
 SLOT = 18           # port slots, and the lines on them, are this far apart
+SLOT_LH = 12        # each further line of a wrapped slot name
+LABEL_LH = 13       # between the lines of a label
 PAD = 8             # below the last slot
 GAP_Y = 18          # between boxes in a column
 GROUP_HEAD = 24     # an amp location's header
@@ -63,7 +75,11 @@ TITLE_H = 30        # column titles
 TRACK = 8           # between vertical tracks in a gap
 LABEL_PAD = 10
 CHAR_W = 6.4        # 11px label text, a generous average
+TITLE_CHAR_W = 7.2  # 600 12px box titles
+SLOT_CHAR_W = 5.9   # 10px slot names
+TEXT_W = BOX_W - 16  # inside a box
 LABEL_MAX = 300
+LABEL_LINES_MAX = 6
 SWEEPS = 4
 
 NO_LOCATION = 'No location'
@@ -91,24 +107,54 @@ class Box:
     outs: list = field(default_factory=list)    # segments starting here
     slots: list = field(default_factory=list)   # named input slots' labels, top to bottom
     in_slot: dict = field(default_factory=dict)  # segment -> its input slot's index
+    slot_lines: list = field(default_factory=list)  # each slot's label, wrapped
+    in_h: list = field(default_factory=list)    # each input row's height
+    out_h: list = field(default_factory=list)   # each output row's height (its label's lines)
 
     @property
     def dummy(self):
         return self.style == 'dummy'
 
-    @property
+    # Read once the box is built (its label, sub and lines are set by then).
+    @cached_property
+    def title_lines(self):
+        return wrap(self.label, TEXT_W, TITLE_CHAR_W)
+
+    @cached_property
+    def text_rows(self):
+        """[(class, text, y offset of its baseline)]: title, subtitle, extra lines."""
+        rows, y = [], 15
+        for line in self.title_lines:
+            rows.append(('t', line, y))
+            y += TITLE_LH
+        y += LINE_H - TITLE_LH
+        for line in wrap(self.sub, TEXT_W):
+            rows.append(('s', line, y))
+            y += LINE_H
+        for extra in self.lines:
+            for line in wrap(extra, TEXT_W):
+                rows.append(('s ln', line, y))
+                y += LINE_H
+        return rows
+
+    @cached_property
     def head(self):
-        return HEAD + LINE_H * len(self.lines)
+        return self.text_rows[-1][2] + HEAD - 28     # 6 under the last baseline
 
     def row_y(self, i):
-        return self.y + self.head + SLOT / 2 + i * SLOT
+        """Input row ``i``'s line (a wrapped slot's first line)."""
+        return self.y + self.head + sum(_rows(self.in_h, i)) + SLOT / 2
+
+    def out_row_y(self, i):
+        """Output row ``i``'s line, under its label's lines."""
+        return self.y + self.head + sum(_rows(self.out_h, i + 1)) - SLOT / 2
 
     def slot_y(self, segment):
         if self.dummy:
             return self.y + SLOT / 2
         if segment.to_box is self:
             return self.row_y(self.in_slot.get(segment, self.ins.index(segment)))
-        return self.row_y(self.outs.index(segment))
+        return self.out_row_y(self.outs.index(segment))
 
 
 @dataclass
@@ -119,6 +165,14 @@ class Group:
     column: int = AMP
     x: float = 0
     y: float = 0
+
+    @cached_property
+    def lines(self):
+        return wrap(self.label, BOX_W)
+
+    @property
+    def head(self):
+        return GROUP_HEAD + LINE_H * (len(self.lines) - 1)
 
 
 @dataclass(eq=False)          # identity: boxes and segments point at each other
@@ -139,9 +193,18 @@ class Route:
     label: str
     label_x: float
     label_y: float
-    label_full: str         # the untruncated label, for a tooltip
+    label_full: str         # the label on one line, for a tooltip
     classes: tuple
     question: bool          # unlinked or ambiguous: drawn with "?"
+    lines: list = field(default_factory=list)   # drawn, top to bottom; the last at label_y
+    key: int | None = None  # drawn as "[key]", listed in the Connections table
+
+    def line_boxes(self):
+        """[(x0, y0, x1, y1)] around each drawn line, for overlap checks."""
+        n = len(self.lines)
+        return [(self.label_x, y - 9, self.label_x + text_width(line), y + 3)
+                for i, line in enumerate(self.lines)
+                for y in [self.label_y - (n - 1 - i) * LABEL_LH]]
 
 
 @dataclass
@@ -154,15 +217,43 @@ class Layout:
     routes: list
     not_drawn: list = field(default_factory=list)   # edges that would run right to left
 
+    @property
+    def keys(self):
+        """[(key, edge id)] of the labels drawn as keys, in key order."""
+        return sorted((r.key, r.id) for r in self.routes if r.key)
 
-def text_width(text):
-    return len(text) * CHAR_W
+
+def text_width(text, char_w=CHAR_W):
+    return len(text) * char_w
 
 
-def clip(text, width):
-    """``text`` cut with "…" to fit ``width`` (at the label size)."""
-    room = max(1, int(width / CHAR_W))
-    return text if len(text) <= room else text[:room - 1].rstrip() + '…'
+def wrap(text, width, char_w=CHAR_W):
+    """``text`` in lines that fit ``width``, broken at spaces; a word longer
+    than a line is split. Never shortened: the lines hold every character."""
+    room = max(1, int(width / char_w))
+    lines, line = [], ''
+    for word in (text or '').split():
+        while len(word) > room:
+            if line:
+                lines.append(line)
+                line = ''
+            lines.append(word[:room])
+            word = word[room:]
+        if not line:
+            line = word
+        elif len(line) + 1 + len(word) <= room:
+            line += ' ' + word
+        else:
+            lines.append(line)
+            line = word
+    if line or not lines:
+        lines.append(line)
+    return lines
+
+
+def _rows(heights, n):
+    """The first ``n`` row heights; a row not sized yet is one SLOT."""
+    return heights[:n] + [SLOT] * (n - len(heights[:n]))
 
 
 # -- boxes -----------------------------------------------------------------
@@ -204,6 +295,8 @@ class _Builder:
         self.segments = []
         self.edges = []                 # (edge, from box, to box)
         self.not_drawn = []
+        self.drawn_lines = {}           # edge id -> the label's lines as drawn
+        self.keys = {}                  # edge id -> its key, when drawn as one
 
     def box(self, box_id, **kw):
         if box_id not in self.boxes:
@@ -341,13 +434,19 @@ class _Builder:
             named = self.nodes.get(box.node, {}).get('slots')
             if named:
                 self.name_slots(box, named)
-            box.h = box.head + max(len(box.slots) or len(box.ins), len(box.outs), 1) * SLOT + PAD
+            box.slot_lines = [wrap(label, TEXT_W, SLOT_CHAR_W) for label in box.slots]
+            box.in_h = ([SLOT + SLOT_LH * (len(lines) - 1) for lines in box.slot_lines]
+                        or [SLOT] * len(box.ins))
+            box.out_h = [SLOT + LABEL_LH * (max(len(self.drawn_lines[s.edge['id']]), 1) - 1)
+                         if s.first else SLOT for s in box.outs]
+            box.h = box.head + max(sum(box.in_h), sum(box.out_h), SLOT) + PAD
 
     def name_slots(self, box, named):
         """The slots this box's lines use, in the graph's input order; a line
-        with no slot (a processor matched by name only) gets an unnamed one."""
+        with no slot (a processor matched by name only) gets an unnamed one.
+        A slot whose line is hidden (``kept``: network feeds off) stays."""
         used = {s.edge.get('to_slot') for s in box.ins}
-        rows = [slot for slot in named if slot['id'] in used]
+        rows = [slot for slot in named if slot['id'] in used or slot.get('kept')]
         index = {slot['id']: i for i, slot in enumerate(rows)}
         box.slots = [slot['label'] for slot in rows]
         for seg in box.ins:
@@ -370,7 +469,7 @@ class _Builder:
                 if (not box.dummy and box.group != group
                         and (box.column == AMP or box.group is not None)):
                     group = box.group
-                    header = GROUP_HEAD
+                    header = self.groups[group].head
                 wanted = [s.from_box.slot_y(s) - (box.slot_y(s) - box.y) for s in box.ins
                           if s.from_box.column == box.column - 1]
                 y = bottom + GAP_Y + header
@@ -378,7 +477,7 @@ class _Builder:
                     y = max(y, mean(wanted))
                 box.y = y
                 if header:
-                    self.groups[group].y = y - GROUP_HEAD
+                    self.groups[group].y = y - header
                 bottom = y + box.h
 
     def place_x(self):
@@ -395,7 +494,8 @@ class _Builder:
             if c == len(self.columns) - 1:
                 break
             gap = [s for s in self.segments if s.from_box.column == c]
-            labels = [min(text_width(self.label(s.edge)), self.label_max) for s in gap if s.first]
+            labels = [text_width(line) for s in gap if s.first
+                      for line in self.drawn_lines[s.edge['id']]]
             label_zone = (max(labels) + 2 * LABEL_PAD) if labels else LABEL_PAD
             bends = sorted((s for s in gap if abs(s.from_box.slot_y(s) - s.to_box.slot_y(s)) > 0.5),
                            key=lambda s: (s.from_box.slot_y(s), s.to_box.slot_y(s)))
@@ -425,6 +525,34 @@ class _Builder:
             text = ' · '.join(x for x in (text, UNSET_NOTE) if x)
         return text
 
+    def label_lines(self, edge):
+        """The label one line per port group / PA run, as ``label`` words it."""
+        lines = [x for x in (edge.get('label_lines') or [edge.get('label') or '']) if x]
+        if edge.get('unlinked') or edge.get('ambiguous'):
+            lines = [x.rstrip(' →') for x in lines]
+            lines = [x for x in lines if x]
+            frm = self.nodes.get(edge['from'], {})
+            source = frm['label'] if frm.get('feed') else _edge_text(edge)
+            head = f'? {source}' if source else '?'
+            if lines and lines[0].startswith('→'):
+                head = f'{head} {lines.pop(0)}'
+            lines = [head] + lines
+        if edge.get('connection_unset'):
+            lines.append(UNSET_NOTE)
+        return lines
+
+    def fit_labels(self):
+        """Each drawn edge's label lines, or its key when a line is wider
+        than ``label_max`` or there are too many."""
+        n = 0
+        for edge, _, _ in self.edges:
+            lines = self.label_lines(edge)
+            if len(lines) > LABEL_LINES_MAX or any(text_width(x) > self.label_max for x in lines):
+                n += 1
+                self.keys[edge['id']] = n
+                lines = [f'[{n}]']
+            self.drawn_lines[edge['id']] = lines
+
     def routes(self):
         out = []
         for edge, src, dst in self.edges:
@@ -443,9 +571,10 @@ class _Builder:
             y0 = points[0][1]
             out.append(Route(
                 id=edge['id'], from_node=edge['from'], to_node=edge['to'],
-                points=_simplify(points), label=clip(full, self.label_max), label_full=full,
+                points=_simplify(points), label=full, label_full=full,
                 label_x=src.x + src.w + LABEL_PAD, label_y=y0 - 4,
-                classes=_classes(edge), question=bool(edge.get('unlinked') or edge.get('ambiguous'))))
+                classes=_classes(edge), question=bool(edge.get('unlinked') or edge.get('ambiguous')),
+                lines=self.drawn_lines[edge['id']], key=self.keys.get(edge['id'])))
         return out
 
 
@@ -483,9 +612,11 @@ def _simplify(points):
 
 def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
     """``hide_empty``: the columns left out when no box is in them (a tab
-    passes ``ALL_COLUMNS``). ``label_max``: where a line's label is clipped."""
+    passes ``ALL_COLUMNS``). ``label_max``: the widest a label line may be;
+    a wider one makes the label a key."""
     b = _Builder(graph, hide_empty, label_max)
     b.build()
+    b.fit_labels()
     b.order()
     b.sort_slots()
     b.place_y()

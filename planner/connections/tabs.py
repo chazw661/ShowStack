@@ -18,13 +18,18 @@ draw each as its own section.
 Only the nodes an edge reaches are kept (Dante also keeps its devices with
 no link yet). An I/O device's ``ports`` are counted from the kept edges, so
 it gets only the inputs / outputs box the tab uses.
+
+``without_network(graph)`` is the Overview with "Show network feeds" off:
+no AVB / Dante network edges. An amp or processor slot one fed stays on its
+box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
+plugs in where.
 """
 
 OVERVIEW, DANTE, ANALOG, SPEAKERS = 'overview', 'dante', 'analog', 'speakers'
 TABS = (
     (OVERVIEW, 'Overview'),
     (DANTE, 'Dante'),
-    (ANALOG, 'Analog signal flow'),
+    (ANALOG, 'Analogue/AES'),
     (SPEAKERS, 'Speaker cables'),
 )
 TAB_KEYS = tuple(key for key, _ in TABS)
@@ -103,6 +108,32 @@ def _ports(edges, device_id):
             for end in ('from', 'to') if device_id in (e['from'], e['to'])]
     return {'inputs': sum(r.startswith('deviceinput:') for r in refs),
             'outputs': sum(r.startswith('deviceoutput:') for r in refs)}
+
+
+def without_network(graph):
+    nodes = {n['id']: n for n in graph['nodes']}
+    edges, sources = [], {}         # (node, slot id) -> the hidden feeds' sources
+    for edge in graph['edges']:
+        if not edge.get('network'):
+            edges.append(edge)
+        elif edge.get('to_slot'):
+            frm = nodes.get(edge['from'], {}).get('label', '')
+            text = ' '.join(x for x in (frm, edge.get('label', '')) if x)
+            sources.setdefault((edge['to'], edge['to_slot']), []).append(text)
+    out_nodes = []
+    for node in graph['nodes']:
+        if node.get('slots') and any((node['id'], s['id']) in sources for s in node['slots']):
+            slots = []
+            for slot in node['slots']:
+                feeds = sources.get((node['id'], slot['id']))
+                if feeds:
+                    slot = {**slot, 'label': f"{slot['label']} ← {', '.join(feeds)}", 'kept': True}
+                slots.append(slot)
+            node = {**node, 'slots': slots}
+        out_nodes.append(node)
+    kept = {e['id'] for e in edges}
+    return {**graph, 'nodes': out_nodes, 'edges': edges,
+            'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
 
 
 def graph_view(graph, tab):

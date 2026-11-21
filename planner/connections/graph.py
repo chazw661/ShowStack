@@ -27,6 +27,14 @@ processor's slot is its input port ("AES 1", "Analog 2"). An amp's is the
 physical input a source plugs into, numbered by the rack view's input row:
 "XLR n" (analog), "AES n", "AVB n", n the lowest channel that source feeds
 on that transport, and "XLR 1 → Ch 1–2" when it feeds several channels.
+An amp model whose panel names its inputs (``panels``: the L-Acoustics
+amps' IN A..IN D) uses them for rows 1-4: "IN A · XLR", "IN A · AES"; AVB
+stays "AVB n".
+
+Each edge also carries ``label_lines``: its label split one line per port
+group ("Aux 1–4 → Out 1–4", "Mtx 1 → Out 5") and per PA run, which the
+diagram draws one under another. ``from_ports`` / ``to_ports`` are the
+same ports without the arrow, for the diagram's Connections table.
 
 A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2
 +NL4 25' ×1" (the Cable Label, count, cable type, length, fan-outs, each
@@ -56,6 +64,7 @@ from itertools import groupby
 
 from planner.connections import endpoints as ep
 from planner.connections import matchers as m
+from planner.connections.panels import panel_name
 
 SCHEMA = 1
 CONFIRMED, INFERRED = 'confirmed', 'inferred'
@@ -125,6 +134,7 @@ def _feed_label(field, text):
 
 
 SLOT_PREFIX = {'avb': 'AVB', 'analog': 'XLR', 'aes': 'AES'}   # rack view's row order
+PANEL_TRANSPORTS = ('analog', 'aes')     # a panel socket; AVB has none
 
 
 def _slots(links, index):
@@ -156,7 +166,10 @@ def _slots(links, index):
     for (amp, slot), labels in channels.items():
         transport, number = slot.split(':', 1)
         first = min(labels, key=_sort_key)
-        label = f'{SLOT_PREFIX.get(transport, transport)} {first.number}'
+        panel = index.nodes[amp].extra.get('panel_inputs') or ()
+        name = panel_name(panel, first.number) if transport in PANEL_TRANSPORTS else None
+        prefix = SLOT_PREFIX.get(transport, transport)
+        label = f'{name} · {prefix}' if name else f'{prefix} {first.number}'
         if len(labels) > 1:
             label += f' → {_runs(sorted(labels, key=_sort_key))}'
         order = prefixes.index(transport) if transport in prefixes else len(prefixes)
@@ -412,8 +425,18 @@ def _runs(labels):
     return f'{prefix} {", ".join(parts)}'
 
 
-def _edge_label(links):
-    """One "From → To" phrase per (from prefix, to prefix), joined by " · "."""
+def _ports(labels):
+    """Port labels as runs, one per prefix: 'Aux 1–4, Mtx 1'."""
+    groups = defaultdict(list)
+    for label in labels:
+        if label not in groups[label.prefix]:
+            groups[label.prefix].append(label)
+    return ', '.join(_runs(sorted(g, key=_sort_key)) for g in groups.values())
+
+
+def _label_parts(links):
+    """(phrases, cables): one "From → To" phrase per (from prefix, to
+    prefix), and each PA run's cable label."""
     groups = defaultdict(lambda: ([], []))
     for link in links:
         key = (link.from_port.label.prefix if link.from_port else None,
@@ -435,10 +458,20 @@ def _edge_label(links):
             phrase = f'{_runs(froms)} → {_runs(tos)}'.strip()
         if phrase:
             phrases.append(phrase)
-    # PA runs carry no ports; their label is the cable's. Several runs on
-    # one edge are listed, "; "-separated (each already uses " · ").
-    cables = '; '.join(dict.fromkeys(l.cable_label for l in links if l.cable_label))
-    return ' · '.join(x for x in (' · '.join(phrases), cables) if x)
+    return phrases, list(dict.fromkeys(l.cable_label for l in links if l.cable_label))
+
+
+def _edge_label(links):
+    """The label on one line: phrases joined by " · "; PA runs carry no
+    ports, their label is the cable's, several runs "; "-separated (each
+    already uses " · ")."""
+    phrases, cables = _label_parts(links)
+    return ' · '.join(x for x in (' · '.join(phrases), '; '.join(cables)) if x)
+
+
+def _edge_label_lines(links):
+    phrases, cables = _label_parts(links)
+    return phrases + cables
 
 
 def _merge_cables(cables):
@@ -542,6 +575,9 @@ def project_graph(project, index=None, matches=None):
         edge = {
             'id': edge_id, 'from': frm, 'to': to,
             'label': _edge_label(links),
+            'label_lines': _edge_label_lines(links),
+            'from_ports': _ports([l.from_port.label for l in links if l.from_port]),
+            'to_ports': _ports([l.to_port.label for l in links if l.to_port]),
             'transports': sorted({l.transport for l in links if l.transport}),
             'network': network, 'status': status, 'unlinked': unlinked,
             'cable': _merge_cables([l.cable for l in links]),

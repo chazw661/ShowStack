@@ -384,6 +384,47 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'amp / destination box')
         self.assert_text(page, 'svg.wd-svg .wd-group', QUOTED, 'amp rack header')
 
+    def test_names_in_wrapped_titles_kept_slots_and_the_connections_table(self):
+        # PR 3.3: a long hostile name wraps over several title lines; a label
+        # too long to draw is a key whose row in the Connections table names
+        # both ends; with network feeds off, the AVB slot keeps its source.
+        from planner.models import (Amp, AmpChannel, AmpLocation, Console, ConsoleAuxOutput,
+                                    Device, DeviceOutput, Location, P1Output, P1Processor,
+                                    SystemProcessor)
+        long_name = f'{QUOTED} {NAME} {QUOTED}'
+        desk = Console.objects.create(project=self.project, name=long_name)
+        box = Device.objects.create(project=self.project, name=NAME)
+        for n in range(1, 50, 2):
+            bus = ConsoleAuxOutput.objects.create(console=desk, aux_number=str(n), name=f'Mix {n}')
+            DeviceOutput.objects.create(device=box, output_number=n, signal_name=f'Mix {n}',
+                                        console_output=bus)
+        proc = SystemProcessor.objects.create(project=self.project, name=QUOTED, device_type='P1',
+                                              location=Location.objects.create(
+                                                  project=self.project, name='Racks'))
+        P1Processor.objects.create(system_processor=proc)
+        P1Output.objects.filter(p1_processor__system_processor=proc, output_type='AVB',
+                                channel_number=1).update(label='Delay')
+        amp = Amp.objects.create(project=self.project, name='Amp 1', location=AmpLocation.objects.create(
+            project=self.project, name='Amp Racks'))
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=1,
+                                            defaults={'avb_stream': 'AVB 1 - Delay'})
+        url = reverse('planner:wiring_diagram')
+
+        page = self.open(url)
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', long_name, 'wrapped title tooltip')
+        self.assertGreater(page.evaluate(
+            "[...document.querySelectorAll('svg.wd-svg .wd-box')].map(g => g.querySelectorAll("
+            "'text.t').length).reduce((a, b) => Math.max(a, b), 0)"), 1)
+        self.assert_text(page, 'svg.wd-svg .wd-label', '[1]', 'key on the line')
+        self.assert_text(page, '#wd-connections td', long_name, 'connections table, from')
+        self.assert_text(page, '#wd-connections td', NAME, 'connections table, to')
+
+        page = self.open(url + '?view=overview&network=0')
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-box text.p', f'AVB 1 ← {QUOTED}', 'kept AVB slot')
+        self.assert_text(page, '.wd-switch', 'Show network feeds', 'network switch')
+
     # -- Dashboard -------------------------------------------------------------
 
     # -- Mic Planner walkthrough ----------------------------------------------
