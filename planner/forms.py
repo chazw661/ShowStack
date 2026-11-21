@@ -883,34 +883,12 @@ from django import forms
 from .models import P1Processor, P1Input, P1Output, DeviceOutput
 
 
-def _processor_input_suggestions(project):
-    """Device-output signal names for the processor-input datalist.
-
-    Issue #16: the Processor input row used to have separate Name + Origin
-    dropdown fields. We collapsed them into a single combobox bound to
-    `label`. The user can either type freely or pick from the suggestions
-    sourced here. Scoped by project to avoid leaking signal names from
-    other shows.
-    """
-    if project is None:
-        return []
-    from .models import Device
-    seen = set()
-    suggestions = []
-    qs = (Device.objects
-          .filter(project=project)
-          .prefetch_related('outputs')
-          .order_by('name'))
-    for device in qs:
-        for output in device.outputs.order_by('output_number'):
-            name = (output.signal_name or '').strip()
-            if not name:
-                continue
-            if name in seen:
-                continue
-            seen.add(name)
-            suggestions.append(name)
-    return suggestions
+def _picker_only_for_aes_and_analog(form):
+    """PR 2b-3: AES and Analog inputs pick their source from the processor
+    page's datalist (``connections.processor_sources``, built once per page
+    by the inline). AVB inputs are network streams: free text, no list."""
+    if form.instance.input_type not in ('AES', 'ANALOG'):
+        form.fields['label'].widget.attrs.pop('list', None)
 
 
 class P1InputInlineForm(forms.ModelForm):
@@ -932,10 +910,7 @@ class P1InputInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        project = None
-        if self.instance and self.instance.pk and self.instance.p1_processor_id:
-            project = self.instance.p1_processor.system_processor.project
-        self.input_suggestions = _processor_input_suggestions(project)
+        _picker_only_for_aes_and_analog(self)
 
 class P1OutputInlineForm(forms.ModelForm):
     """Form for P1 Output inline admin"""
@@ -1025,10 +1000,7 @@ class GalaxyInputInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        project = None
-        if self.instance and self.instance.pk and self.instance.galaxy_processor_id:
-            project = self.instance.galaxy_processor.system_processor.project
-        self.input_suggestions = _processor_input_suggestions(project)
+        _picker_only_for_aes_and_analog(self)
 
 
 class GalaxyOutputInlineForm(forms.ModelForm):

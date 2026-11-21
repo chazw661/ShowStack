@@ -101,6 +101,10 @@ class Command(BaseCommand):
     # -- rules ------------------------------------------------------------------
 
     def _rule_a(self, index, matches, detail):
+        orphaned = sum(1 for _, source, target, _ in index.processor_links
+                       if source is None or target is None)
+        self.stdout.write(' processor inputs linked (confirmed): %d · orphaned: %d'
+                          % (len(index.processor_links) - orphaned, orphaned))
         pairs = sum(1 for x in matches if x.verdict == m.SAME_PROCESSOR
                     and len({t.type for t in x.targets if not isinstance(t, str)}) > 1)
         self.stdout.write(' (a) %s   [same-processor type pairs: %d]'

@@ -52,8 +52,9 @@ never resolved: the edge has ``ambiguous: true`` and its ``candidates``, and
 and text ("AVB 1", "AES: Left"), shared by every amp channel that typed it,
 with the ``reason`` it names nothing.
 
-Seam for PR 2b: ``_stored_links`` is where stored Connection rows join, and
-where a confirmed row will suppress the inferred links it covers.
+Stored Connection rows join in ``_stored_links``: amp inputs linked to their
+source (PR 2b-2) and P1 / Galaxy AES or Analog inputs linked to an I/O or
+console output (PR 2b-3), both confirmed; a linked input is never matched.
 """
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -89,6 +90,7 @@ class Link:
     text: dict | None = None
     cable_label: str = ''       # PA runs: "HR · 2× NL 8 75'"
     to_slot: str = ''           # the amp / processor input slot it lands on
+    note: str = ''              # after the source ports on a slotted label: "Out 17 · AES"
 
 
 def _cable_for(transport):
@@ -372,11 +374,16 @@ class _Graph:
                 cable_label=_pa_cable_label(row)))
 
 
+LINK_NOTE = {'aes': 'AES', 'analog': 'Analog'}
+
+
 def _stored_links(index):
-    """Stored Connection rows, as confirmed links. Today: an amp input linked
-    to its source output (PR 2b-2), drawn from the processor or the I/O
-    device's outputs box; rule (b) leaves those inputs alone. A row whose end
-    is gone (deleted outside the ORM) is skipped; the report counts it."""
+    """Stored Connection rows, as confirmed links: an amp input linked to its
+    source output (PR 2b-2), drawn from the processor or the I/O device's
+    outputs box, and a processor AES / Analog input linked to an I/O or
+    console output (PR 2b-3), labelled with its transport ("Out 17 · AES").
+    Rules (a) and (b) leave those inputs alone. A row whose end is gone
+    (deleted outside the ORM) is skipped; the report counts it."""
     links = []
     for pk, source, channel, transport in index.amp_links:
         if source is None or channel is None:
@@ -384,6 +391,12 @@ def _stored_links(index):
         links.append(Link(source.node, channel.node, source, channel, transport,
                           network=transport == 'avb', source=('connection', pk),
                           cable=_cable_for(transport)))
+    for pk, source, target, transport in index.processor_links:
+        if source is None or target is None:
+            continue
+        links.append(Link(source.node, target.node, source, target, transport,
+                          source=('connection', pk), cable=_cable_for(transport),
+                          note=LINK_NOTE.get(transport, '')))
     return links
 
 
@@ -440,10 +453,12 @@ def _label_parts(links):
             tos.append(link.to_port.label)
     # Into a slot: the slot names the input, so only the source side.
     slotted = all(l.to_slot for l in links)
+    notes = {l.note for l in links}
+    note = notes.pop() if len(notes) == 1 else ''
     phrases = []
     for froms, tos in groups.values():
         if slotted:
-            phrase = _runs(froms)
+            phrase = ' · '.join(x for x in (_runs(froms), note) if x)
         elif not froms and not tos:
             continue
         else:

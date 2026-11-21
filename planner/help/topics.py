@@ -541,6 +541,16 @@ TOPICS = (
         keywords=('wiring', 'diagram', 'signal flow', 'block diagram', 'connections', 'inferred', 'not linked', 'ambiguous',),
     ),
     Topic(
+        slug='wiring-diagram-tabs',
+        title='Use the wiring diagram tabs and Console connection',
+        section='Amps & PA',
+        summary='Overview, Dante, Analogue/AES and Speaker cables; set how each I/O device reaches the console.',
+        pages=(
+            'planner:wiring_diagram',
+        ),
+        keywords=('wiring', 'tabs', 'dante', 'analogue', 'aes', 'speaker cables', 'console connection', 'twinlane', 'madi', 'network feeds', 'key', 'print',),
+    ),
+    Topic(
         slug='pa-cable-fanouts-jumpers',
         title='Add fan-outs, extensions and jumpers',
         section='Amps & PA',

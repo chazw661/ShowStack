@@ -207,6 +207,7 @@ KWARG_MODELS = {
     'location_id': [('', 'Location')],
     'day_id': [('', 'ShowDay')],
     'bp_id': [('', 'CommBeltPack')],
+    'input_id': [('p1-input', 'P1Input'), ('galaxy-input', 'GalaxyInput')],
 }
 
 # Admin actions a viewer is offered besides viewer_ok ones, and why.

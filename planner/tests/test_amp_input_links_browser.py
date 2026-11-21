@@ -1,4 +1,4 @@
-"""Amp input pickers in a real browser (PR 2b-2).
+"""Amp and processor input pickers in a real browser (PR 2b-2, 2b-3).
 
 The datalist is the picker: an entry typed or picked links the input, other
 text unlinks it, and the in-cell button's "Unlink (keep text)" drops the link
@@ -175,3 +175,113 @@ class AmpInputPickerBrowserTests(ConnectionFixtures, StaticLiveServerTestCase):
 def _ct(model):
     from django.contrib.contenttypes.models import ContentType
     return ContentType.objects.get(app_label='planner', model=model).pk
+
+
+PROC = 'Left · Y001 Out 1'
+
+
+@unittest.skipUnless(BROWSER, 'set SS_BROWSER_TESTS=1 (needs playwright + browsers)')
+@override_settings(STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class ProcessorInputPickerBrowserTests(ConnectionFixtures, StaticLiveServerTestCase):
+    """PR 2b-3: the P1 page's AES / Analog inputs pick a source and save it."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')  # sync Playwright
+        super().setUpClass()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        super().tearDownClass()
+
+    def setUp(self):
+        super().setUp()
+        self.user.is_staff = self.user.is_superuser = True
+        self.user.save()
+        self.client.force_login(self.user)
+        session = self.client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+        self.sl = self.p1('SL P1')
+        self.box = self.device('Y001')
+        self.left = self.device_output(self.box, 1, 'Left')
+        self.matrix(self.console('FOH PM5'), 3, name='Lobby')
+        from planner.models import P1Input
+        self.aes1 = P1Input.objects.get(p1_processor__system_processor=self.sl,
+                                        input_type='AES', channel_number=1)
+
+    def open(self):
+        context = self.browser.new_context(viewport={'width': 1280, 'height': 900})
+        context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
+                              'url': self.live_server_url}])
+        self.addCleanup(context.close)
+        page = context.new_page()
+        self.errors = []
+        page.on('pageerror', lambda e: self.errors.append(str(e)))
+        page.goto(self.live_server_url + reverse('admin:planner_p1processor_change',
+                                                 args=[self.sl.p1_config.pk]))
+        page.wait_for_load_state('networkidle')
+        return page
+
+    def cell(self):
+        return f'td.proc-input-cell:has(.proc-link-btn[data-input-id="{self.aes1.pk}"])'
+
+    def save(self, page):
+        with page.expect_navigation():
+            page.click('input[name="_continue"]')
+        page.wait_for_load_state('networkidle')
+
+    def test_picking_from_the_grouped_list_links_on_save(self):
+        page = self.open()
+        page.click(self.cell() + ' .label-field input')
+        page.wait_for_selector('.combobox-opt-group')
+        headers = page.eval_on_selector_all('.combobox-opt-group', 'hs => hs.map(h => h.textContent)')
+        self.assertEqual(headers, ['Y001', 'FOH PM5'])
+        page.click(f'.combobox-opt:text-is("{PROC}")')
+        self.assertEqual(page.input_value(self.cell() + ' .label-field input'), PROC)
+        self.save(page)
+        self.assertEqual(Connection.objects.get().from_id, self.left.pk)
+        self.assertTrue(page.eval_on_selector(self.cell(), 'td => td.classList.contains("linked")'))
+        self.assertEqual(page.get_attribute(self.cell() + ' .proc-link-btn', 'title'),
+                         f'Linked to {PROC}')
+        self.shot(page, 'p1_inputs_linked.png')
+        self.assertEqual(self.errors, [])
+
+    def test_typing_away_warns_then_saving_unlinks(self):
+        self.aes1.label = PROC
+        self.aes1.save()
+        from planner.connections import processor_sources
+        processor_sources.link_from_text(self.aes1)
+        page = self.open()
+        page.fill(self.cell() + ' .label-field input', 'Left')
+        self.assertIn('Saving this text will unlink it',
+                      page.get_attribute(self.cell() + ' .proc-link-btn', 'title'))
+        self.save(page)
+        self.assertFalse(Connection.objects.exists())
+        self.assertEqual(self.errors, [])
+
+    def test_unlink_keeps_the_text(self):
+        self.aes1.label = PROC
+        self.aes1.save()
+        from planner.connections import processor_sources
+        processor_sources.link_from_text(self.aes1)
+        page = self.open()
+        page.click(self.cell() + ' .proc-link-btn')
+        page.wait_for_selector('#proc-link-menu:not([hidden])')
+        with page.expect_response(lambda r: '/unlink/' in r.url):
+            page.click('#proc-link-unlink')
+        self.assertFalse(page.eval_on_selector(self.cell(), 'td => td.classList.contains("linked")'))
+        self.assertFalse(Connection.objects.exists())
+        self.assertEqual(page.input_value(self.cell() + ' .label-field input'), PROC)
+        self.aes1.refresh_from_db()
+        self.assertEqual(self.aes1.label, PROC)
+        self.assertEqual(self.errors, [])
+
+    shot = AmpInputPickerBrowserTests.shot

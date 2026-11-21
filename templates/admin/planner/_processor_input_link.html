@@ -1,0 +1,10 @@
+{% comment %}
+PR 2b-3: a P1 / Galaxy AES or Analog input's link state, beside its port
+name. ``linked`` is the source's datalist entry when the input is linked,
+else blank. An editor's button offers "Unlink (keep text)"; a viewer's is a
+plain marker. Behaviour: _processor_input_link_assets.html.
+{% endcomment %}
+{% if can_edit %}<button type="button"{% else %}<span{% endif %} class="proc-link-btn{% if linked %} linked{% endif %}"
+    data-kind="{{ kind }}" data-input-id="{{ input_id }}" data-linked="{{ linked }}"
+    title="{% if linked %}Linked to {{ linked }}{% else %}Not linked. Pick an entry from the list and save to link it.{% endif %}"
+    aria-label="{% if linked %}Linked to {{ linked }}{% else %}Not linked{% endif %}"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6.5 9.5l3-3M5 7.5L3.5 9a2.1 2.1 0 003 3L8 10.5M8 5.5L9.5 4a2.1 2.1 0 013 3L11 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{% if can_edit %}</button>{% else %}</span>{% endif %}

@@ -1,0 +1,120 @@
+{% comment %}
+PR 2b-3: the P1 / Galaxy input link markers (_processor_input_link.html).
+A linked cell has a green edge and a green link icon; clicking it offers
+"Unlink (keep text)", which removes the link at once and leaves the text.
+Typing other text dims the marker: saving the page will unlink it. Included
+by p1_input_inline.html and galaxy_input_inline.html; installs once.
+{% endcomment %}
+<style>
+  .proc-input-cell.linked { box-shadow: inset 2px 0 0 #3ddc84; }
+  .proc-link-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; padding: 0 !important; margin: 0 0 0 4px !important;
+    border: 0 !important; background: transparent !important; vertical-align: middle;
+    color: #9ab !important; opacity: 0.35; line-height: 0; cursor: default;
+  }
+  .proc-link-btn.linked { color: #3ddc84 !important; opacity: 1; }
+  .proc-link-btn.linked.pending { opacity: 0.4; }
+  button.proc-link-btn.linked { cursor: pointer; }
+  .proc-link-menu {
+    position: absolute; z-index: 50; padding: 4px;
+    background: var(--ss-raised, #2b2b2b); border: 1px solid var(--ss-border, #444); border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .proc-link-menu button {
+    background: transparent !important; color: #f0f0f0 !important; border: 0 !important;
+    font: inherit; font-size: 12px; padding: 4px 8px !important; cursor: pointer;
+  }
+</style>
+<div id="proc-link-menu" class="proc-link-menu" hidden>
+  <button type="button" id="proc-link-unlink">Unlink (keep text)</button>
+</div>
+<script>
+(function () {
+  if (window.procLinkInstalled) return;
+  window.procLinkInstalled = true;
+  var URLS = {p1input: '{% url "planner:p1_input_unlink" 0 %}',
+              galaxyinput: '{% url "planner:galaxy_input_unlink" 0 %}'};
+
+  function csrf() {
+    var el = document.querySelector('input[name=csrfmiddlewaretoken]');
+    if (el) return el.value;
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function show(btn, linked) {
+    var cell = btn.closest('.proc-input-cell');
+    btn.dataset.linked = linked;
+    btn.classList.toggle('linked', !!linked);
+    btn.classList.remove('pending');
+    if (cell) cell.classList.toggle('linked', !!linked);
+    var text = linked ? 'Linked to ' + linked : 'Not linked. Pick an entry from the list and save to link it.';
+    btn.setAttribute('title', text);
+    btn.setAttribute('aria-label', linked ? 'Linked to ' + linked : 'Not linked');
+  }
+
+  function init() {
+    var menu = document.getElementById('proc-link-menu');
+    var unlinkBtn = document.getElementById('proc-link-unlink');
+    if (!menu || !unlinkBtn) return;
+    document.body.appendChild(menu);
+    var target = null;
+    function close() { menu.hidden = true; target = null; }
+
+    document.querySelectorAll('.proc-link-btn').forEach(function (btn) {
+      var cell = btn.closest('.proc-input-cell');
+      var input = cell && cell.querySelector('.label-field input');
+      if (cell && btn.classList.contains('linked')) cell.classList.add('linked');
+      if (input) {
+        input.addEventListener('input', function () {
+          if (!btn.dataset.linked) return;
+          var away = input.value !== btn.dataset.linked;
+          btn.classList.toggle('pending', away);
+          btn.setAttribute('title', away
+            ? 'Linked to ' + btn.dataset.linked + '. Saving this text will unlink it.'
+            : 'Linked to ' + btn.dataset.linked);
+        });
+      }
+      if (btn.tagName !== 'BUTTON') return;
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (!btn.classList.contains('linked')) {      // nothing to unlink: go to the field
+          if (input) input.focus();
+          return;
+        }
+        var box = btn.getBoundingClientRect();
+        menu.style.left = (box.left + window.scrollX - 60) + 'px';
+        menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
+        menu.hidden = false;
+        target = btn;
+      });
+    });
+
+    unlinkBtn.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var btn = target;
+      close();
+      if (!btn) return;
+      var base = URLS[btn.dataset.kind];
+      if (!base) return;
+      var url = base.replace('/0/', '/' + encodeURIComponent(btn.dataset.inputId) + '/');
+      fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' },
+      }).then(function (r) { return r.json(); }).then(function (r) {
+        if (r.success) show(btn, '');
+      }).catch(function (err) { console.error(err); });
+    });
+    document.addEventListener('click', function (event) {
+      if (!menu.hidden && !menu.contains(event.target)) close();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') close();
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>

@@ -34,15 +34,16 @@
   <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
     {{ inline_admin_formset.formset.management_form }}
 
-    {% with first_form=inline_admin_formset.forms.0 %}
-      {% if first_form.input_suggestions %}
-        <datalist id="p1-input-suggestions">
-          {% for name in first_form.input_suggestions %}
-            <option value="{{ name }}"></option>
-          {% endfor %}
-        </datalist>
-      {% endif %}
+    {% with fs=inline_admin_formset.formset %}
+      {% comment %}PR 2b-3: the AES / Analog inputs' picker, one entry per
+      I/O and console output, grouped by device (connections.processor_sources).{% endcomment %}
+      <datalist id="p1-input-suggestions">
+        {% for s in fs.picker %}
+          <option value="{{ s.text }}" data-console="{{ s.group }}"></option>
+        {% endfor %}
+      </datalist>
     {% endwith %}
+    {% include "admin/planner/_processor_input_link_assets.html" %}
 
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
@@ -55,7 +56,7 @@
           <tr class="form-row">
             {% for inline_admin_form in inline_admin_formset %}
               {% if 'AES' in inline_admin_form.form.instance.get_input_type_display or 'Analog' in inline_admin_form.form.instance.get_input_type_display %}
-                <td class="p1-input-cell">
+                <td class="p1-input-cell proc-input-cell">
                   {% if inline_admin_form.fk_field %}
                     {{ inline_admin_form.fk_field.field }}
                   {% endif %}
@@ -64,7 +65,7 @@
                   {% endfor %}
 
                   <div class="type-label">
-                    {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
+                    {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}{% if inline_admin_form.form.pickable %}{% include "admin/planner/_processor_input_link.html" with linked=inline_admin_form.form.linked kind="p1input" input_id=inline_admin_form.form.instance.pk can_edit=inline_admin_formset.formset.can_edit %}{% endif %}
                   </div>
 
                   <div class="label-field">

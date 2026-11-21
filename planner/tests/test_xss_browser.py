@@ -310,6 +310,46 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
                          f'Linked to {avb}')
         self.assert_text(page, cell + '[data-field="avb_stream"]', avb, 'linked input text')
 
+    def test_names_in_the_processor_input_picker_and_link_marker(self):
+        # PR 2b-3: the datalist and the link marker's title / data-linked are
+        # server-rendered; the combobox panel draws the rows with textContent.
+        from planner.models import (Connection, Console, ConsoleMatrixOutput, Device,
+                                    DeviceOutput, Location, P1Input, P1Processor,
+                                    SystemProcessor)
+        from planner.connections import processor_sources
+        proc = SystemProcessor.objects.create(project=self.project, name='SL P1', device_type='P1',
+                                              location=Location.objects.create(
+                                                  project=self.project, name='Racks'))
+        config = P1Processor.objects.create(system_processor=proc)
+        box = Device.objects.create(project=self.project, name=QUOTED)
+        DeviceOutput.objects.create(device=box, output_number=1, signal_name=NAME)
+        desk = Console.objects.create(project=self.project, name=NAME)
+        ConsoleMatrixOutput.objects.create(console=desk, matrix_number='1', name=QUOTED)
+        io = f'{NAME} · {QUOTED} Out 1'
+        mtx = f'{QUOTED} · {NAME} Mtx 1'
+        aes1 = P1Input.objects.get(p1_processor=config, input_type='AES', channel_number=1)
+        aes1.label = io
+        aes1.save()
+        processor_sources.link_from_text(aes1)
+        self.assertEqual(Connection.objects.count(), 1)
+        page = self.open(reverse('admin:planner_p1processor_change', args=[config.pk]))
+        values = page.eval_on_selector_all('#p1-input-suggestions option', 'os => os.map(o => o.value)')
+        self.assertEqual(sorted(values), sorted([io, mtx]))
+        groups = page.eval_on_selector_all('#p1-input-suggestions option',
+                                           'os => os.map(o => o.dataset.console)')
+        self.assertEqual(sorted(groups), sorted([QUOTED, NAME]))
+        marker = f'.proc-link-btn[data-input-id="{aes1.pk}"]'
+        self.assertEqual(page.get_attribute(marker, 'title'), f'Linked to {io}')
+        self.assertEqual(page.get_attribute(marker, 'data-linked'), io)
+        field = f'td.proc-input-cell:has({marker}) .label-field input'
+        self.assert_text(page, field, io, 'linked input text')
+        page.fill(field, '')                                   # the panel lists every row
+        page.wait_for_selector('.combobox-opt')
+        self.assert_text(page, '.combobox-opt', mtx, 'picker row')
+        self.assert_text(page, '.combobox-opt', io, 'picker row')
+        self.assert_text(page, '.combobox-opt-group', NAME, 'picker group header')
+        self.assert_text(page, '.combobox-opt-group', QUOTED, 'picker group header')
+
     # -- Wiring Diagram ----------------------------------------------------------
 
     def test_names_in_the_wiring_diagram_svg_and_warnings(self):

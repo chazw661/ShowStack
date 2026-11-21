@@ -26,6 +26,7 @@ from planner.views import _shared_header_context
 WARNING_TITLES = {
     'ambiguous': 'Matches more than one',
     'drift': 'Label differs from the stream',
+    'duplicate': 'Same name, location and IP (rename one to link its outputs)',
 }
 
 
@@ -64,6 +65,22 @@ def warnings_for(graph, lay):
             'edge': f"{labels.get(edge['from'], edge['from'])} → {labels.get(edge['to'], edge['to'])}",
             'text': edge.get('label', ''), 'candidates': [],
         })
+    return rows
+
+
+def duplicate_warning_rows(project):
+    """Devices the input pickers cannot tell apart (PR 2b-3): their outputs
+    read "(duplicate device)" and link nothing until one is renamed."""
+    from planner.connections import amp_sources, processor_sources, sources
+    groups = (sources.duplicate_warnings(amp_sources.all_sources(project))
+              + sources.duplicate_warnings(processor_sources.all_sources(project)))
+    rows, seen = [], set()
+    for names in groups:
+        key = tuple(names)
+        if key not in seen:
+            seen.add(key)
+            rows.append({'kind': 'duplicate', 'title': WARNING_TITLES['duplicate'],
+                         'edge': ' and '.join(names), 'text': '', 'candidates': []})
     return rows
 
 
@@ -150,7 +167,7 @@ def wiring_diagram(request):
         'connections': connection_rows(graph, lay),
         # svg.render escapes every name it draws.
         'svg': mark_safe(svg.render(lay, title=f'Wiring diagram: {project.name} — {tab_label}')),
-        'warnings': warnings_for(graph, lay),
+        'warnings': warnings_for(graph, lay) + duplicate_warning_rows(project),
         'counts': {
             'boxes': len(lay.boxes),
             'edges': len(edges),
