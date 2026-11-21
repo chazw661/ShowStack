@@ -416,7 +416,7 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assertGreater(page.evaluate(
             "[...document.querySelectorAll('svg.wd-svg .wd-box')].map(g => g.querySelectorAll("
             "'text.t').length).reduce((a, b) => Math.max(a, b), 0)"), 1)
-        self.assert_text(page, 'svg.wd-svg .wd-label', '[1]', 'key on the line')
+        self.assert_text(page, 'svg.wd-svg .wd-key text', '[1]', 'key badge on the line')
         self.assert_text(page, '#wd-connections td', long_name, 'connections table, from')
         self.assert_text(page, '#wd-connections td', NAME, 'connections table, to')
 

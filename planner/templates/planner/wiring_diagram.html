@@ -56,7 +56,24 @@
                                             border-bottom: 1px solid var(--ss-border); vertical-align: top;
                                             background: none; }
   .wd-connections th { color: #aaa; font-weight: 600; }
-  .wd-connections td.k { color: #fff; font-weight: 600; white-space: nowrap; }
+  .wd-connections td.k { white-space: nowrap; }
+  .wd-keybadge { display: inline-block; font-weight: 700; color: #fff; border: 1.2px solid #ddd;
+                 border-radius: 3px; padding: 0 4px; line-height: 1.4; }
+  .wd-print-tab { display: none; }
+  @media print {
+    #header, #nav-sidebar, #toggle-nav-sidebar, .breadcrumbs, #footer,
+    .wd-tabs, .wd-bar { display: none !important; }
+    .wd-page, .wd-connections, .wd-warnings { background: #fff !important; color: #000 !important;
+                                             padding: 0; }
+    .wd-page h1, .wd-lede, .wd-connections h2, .wd-warnings h2, .wd-connections th,
+    .wd-connections td, .wd-warnings li, .wd-warnings .k, .wd-warnings .q, .wd-empty,
+    .wd-legend, .wd-print-tab { color: #000 !important; }
+    .wd-print-tab { display: block; font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+    .wd-scroll { overflow: visible; max-height: none; border: none; }
+    .wd-scroll svg { width: 100%; height: auto; }
+    .wd-connections tr { break-inside: avoid; }
+    .wd-keybadge { color: #000; border-color: #000; }
+  }
 </style>
 {% endblock %}
 
@@ -80,6 +97,7 @@
       <p class="wd-banner" role="status">{{ unset|length }} I/O device{{ unset|length|pluralize }} {{ unset|length|pluralize:"has,have" }} no Console connection set:
         {% for d in unset %}<a href="{{ d.url }}">{{ d.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
     {% endif %}
+    <p class="wd-print-tab">{% for t in tabs %}{% if t.active %}{{ t.label }}{% endif %}{% endfor %}</p>
     {% if tab_empty %}
     <p class="wd-empty">{{ tab_empty_text }}</p>
     {% else %}
@@ -107,7 +125,7 @@
         <thead><tr><th scope="col">Key</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Cable / transport</th></tr></thead>
         <tbody>
           {% for c in connections %}
-          <tr data-key="{{ c.key }}"><td class="k">[{{ c.key }}]</td><td>{{ c.from }}</td><td>{{ c.to }}</td><td>{{ c.cable }}</td></tr>
+          <tr data-key="{{ c.key }}"><td class="k"><span class="wd-keybadge">[{{ c.key }}]</span></td><td>{{ c.from }}</td><td>{{ c.to }}</td><td>{{ c.cable }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
