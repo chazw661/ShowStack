@@ -79,8 +79,10 @@ SUBTABLE_MIN_ROOM = 1.5 * inch
 class NumberedCanvas(pdfcanvas.Canvas):
     """Canvas that stamps a footer once the total page count is known.
 
-    Set the module-level footer text via ``NumberedCanvas.configure(...)``
-    before building, since ReportLab constructs the canvas internally.
+    ReportLab constructs the canvas itself, so the footer text rides on the
+    class: ``build_pdf`` makes a subclass per build (``for_build``). Never
+    assign to these attributes on NumberedCanvas itself -- that is state
+    shared by every request in the process.
     """
 
     _project_name = ''
@@ -91,9 +93,12 @@ class NumberedCanvas(pdfcanvas.Canvas):
         self._saved_page_states = []
 
     @classmethod
-    def configure(cls, project_name='', skip_first=True):
-        cls._project_name = project_name or ''
-        cls._skip_first = skip_first
+    def for_build(cls, project_name='', skip_first=True):
+        """A canvas class carrying one build's footer settings."""
+        return type('BuildCanvas', (cls,), {
+            '_project_name': project_name or '',
+            '_skip_first': skip_first,
+        })
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -139,8 +144,8 @@ def build_pdf(buffer, story, pagesize=LANDSCAPE_PAGE, project_name='',
         topMargin=MARGIN, bottomMargin=FOOTER_MARGIN,
         title=title or 'ShowStack Export',
     )
-    NumberedCanvas.configure(project_name=project_name, skip_first=skip_first_footer)
-    doc.build(story, canvasmaker=NumberedCanvas)
+    doc.build(story, canvasmaker=NumberedCanvas.for_build(
+        project_name=project_name, skip_first=skip_first_footer))
     return buffer
 
 

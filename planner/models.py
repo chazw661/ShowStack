@@ -1085,6 +1085,27 @@ class Console(models.Model):
         ordering = ['-is_template', 'name']  # Templates first, then alphabetical
 
 
+def _channel_label(obj, console_descriptor, number, name):
+    """The text for one console channel or bus: "FOH · Ch 3 · Kick".
+
+    Blank parts are left out, so an unnamed bus reads "Aux 3", never
+    "Aux 3 - None". The console's name leads only when the console is already
+    loaded on this row (``console_descriptor.is_cached``), so printing a row
+    never costs a query. The admin's delete confirmation and change messages
+    hand each row its console, so they carry the name; the Console page's
+    inline rows do not (and that label is hidden anyway).
+    """
+    parts = []
+    if console_descriptor.is_cached(obj):
+        console = obj.console
+        if console is not None and console.name:
+            parts.append(str(console.name).strip())
+    parts.append(number)
+    if name and str(name).strip():
+        parts.append(str(name).strip())
+    return " · ".join(p for p in parts if p)
+
+
 class ConsoleInput(models.Model):
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
     dante_number = models.CharField(max_length=3, blank=True, null=True)
@@ -1162,12 +1183,14 @@ class ConsoleInput(models.Model):
     
 
     def __str__(self):
-        if self.dante_number:
-            return f"Input {self.dante_number}"
-        elif self.input_ch:
-            return f"Input {self.input_ch}"
+        # "FOH · Ch 3 · Kick". Never runs a query: see _channel_label.
+        if self.input_ch:
+            number = f"Ch {self.input_ch}"
+        elif self.dante_number:
+            number = f"Dante {self.dante_number}"
         else:
-            return f"Input {self.pk or 'New'}"
+            number = f"Input {self.pk or 'New'}"
+        return _channel_label(self, ConsoleInput.console, number, self.source)
 
 
 
@@ -1215,7 +1238,9 @@ class ConsoleAuxOutput(models.Model):
                                       object_id_field='from_id')
 
     def __str__(self):
-        return f"Aux {self.aux_number} - {self.name}"
+        # "FOH · Aux 3 · Drum Wedge". Never runs a query: see _channel_label.
+        return _channel_label(self, ConsoleAuxOutput.console,
+                              f"Aux {self.aux_number}".strip(), self.name)
 
 
 class ConsoleMatrixOutput(models.Model):
@@ -1243,7 +1268,9 @@ class ConsoleMatrixOutput(models.Model):
                                       object_id_field='from_id')
 
     def __str__(self):
-        return f"Matrix {self.matrix_number} - {self.name}"
+        # "FOH · Matrix 2 · Delay". Never runs a query: see _channel_label.
+        return _channel_label(self, ConsoleMatrixOutput.console,
+                              f"Matrix {self.matrix_number}".strip(), self.name)
     
 class ConsoleStereoOutput(models.Model):
     STEREO_CHOICES = [
@@ -1268,7 +1295,9 @@ class ConsoleStereoOutput(models.Model):
                                       object_id_field='from_id')
 
     def __str__(self):
-        return f"{self.get_stereo_type_display()} - {self.name}"
+        # "FOH · Stereo Left · Main". Never runs a query: see _channel_label.
+        return _channel_label(self, ConsoleStereoOutput.console,
+                              self.get_stereo_type_display() or "Stereo", self.name)
 
     class Meta:
         ordering = ['stereo_type']
