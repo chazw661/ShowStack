@@ -1,0 +1,10 @@
+[Information]
+CS-R3
+DSP-RX
+V6.60
+[SubInPatch]
+SUB_IN_PATCH,SOURCE,COMMENT
+SUB IN 1,NONE,# Blank,
+SUB IN 2,NONE,# Blank,
+SUB IN 3,NONE,# Blank,
+SUB IN 4,NONE,# Blank,
