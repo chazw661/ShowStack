@@ -985,8 +985,6 @@ class ConsoleInputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.Tabular
                      form.fields['DELETE'].label = ""
 
 
-        original_str = self.model.__str__
-        self.model.__str__ = lambda self: ""
 
         return PrepopulatedFormSet
 
@@ -1028,8 +1026,6 @@ class ConsoleAuxOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.Tab
                     if not form.instance.pk:
                         form.initial['aux_number'] = index + 1
 
-        original_str = self.model.__str__
-        self.model.__str__ = lambda self: ""            
 
                 
         return PrepopulatedFormSet
@@ -1069,8 +1065,6 @@ class ConsoleMatrixOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.
                     if not form.instance.pk:
                         form.initial['matrix_number'] = index + 1
 
-        original_str = self.model.__str__
-        self.model.__str__ = lambda self: "" 
                     
 
 
@@ -1100,8 +1094,6 @@ class ConsoleStereoOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.
                     if not form.instance.pk and index < len(stereo_types):
                         form.initial['stereo_type'] = stereo_types[index]
 
-        original_str = self.model.__str__
-        self.model.__str__ = lambda self: ""
         
         return PrepopulatedFormSet   
 

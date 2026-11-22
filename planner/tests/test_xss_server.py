@@ -10,13 +10,15 @@ import json
 import re
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from planner.models import (
     CommBeltPack, CommBeltPackChannel, CommChannel, CommCrewName, CommConfig, Console, ConsoleInput, Crew,
     DiscoveredDevice, MultitrackSession, Project,
 )
+from planner.tests.test_console_b_patch import PLAIN_STATIC
+from planner.tests.test_console_inline_str import ChannelFixture
 from planner.utils.script_json import script_json
 
 NAME = '<img src=x onerror=alert(1)>'
@@ -113,3 +115,48 @@ class CommCrewNamesTests(Base):
         html = self.client.get(reverse('planner:comm_config')).content.decode()
         line = re.search(r'const allCrewNames = (\[.*?\]);', html).group(1)
         self.assertEqual(sorted(['A1\\', ');alert(1)//']), sorted(json.loads(line)))
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ConsoleChannelNameTests(ChannelFixture, TestCase):
+    """A channel or bus name is printed by the admin on the Console's delete
+    confirmation and in its history (``str(channel)``, which used to be
+    blank after any Console page load -- test_console_inline_str)."""
+
+    ESCAPED = '&lt;img src=x onerror=alert(1)&gt;'
+
+    def setUp(self):
+        super().setUp()
+        self.load_console_page()
+
+    def test_delete_confirmation_prints_the_names_as_text(self):
+        ConsoleInput.objects.filter(pk=self.kick.pk).update(source=NAME)
+        for row in (self.aux, self.matrix, self.stereo):
+            type(row).objects.filter(pk=row.pk).update(name=NAME)
+        html = self.client.get(
+            reverse('admin:planner_console_delete', args=[self.foh.pk])).content.decode()
+        self.assertNotIn(NAME, html)
+        for line in ('Console input: FOH · Ch 1 · ', 'Console aux output: FOH · Aux 3 · ',
+                     'Console matrix output: FOH · Matrix 2 · ',
+                     'Console stereo output: FOH · Stereo Left · '):
+            self.assertIn(line + self.ESCAPED, html)
+
+    def test_a_console_name_with_markup_is_text_in_its_channels_lines(self):
+        Console.objects.filter(pk=self.foh.pk).update(name=NAME)
+        html = self.client.get(
+            reverse('admin:planner_console_delete', args=[self.foh.pk])).content.decode()
+        self.assertNotIn(NAME, html)
+        self.assertIn(f'Console input: {self.ESCAPED} · Ch 1 · Kick', html)
+
+    def test_admin_history_prints_the_names_as_text(self):
+        i = self.row('consoleinput_set', self.kick.pk)
+        j = self.row('consoleauxoutput_set', self.aux.pk)
+        r = self.console_post({f'consoleinput_set-{i}-source': NAME,
+                               f'consoleauxoutput_set-{j}-name': NAME})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(NAME, self.last_log().get_change_message())     # stored as typed
+        html = self.client.get(
+            reverse('admin:planner_console_history', args=[self.foh.pk])).content.decode()
+        self.assertNotIn(NAME, html)
+        self.assertIn(f'Ch 1 · {self.ESCAPED}', html)
+        self.assertIn(f'Aux 3 · {self.ESCAPED}', html)

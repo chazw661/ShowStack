@@ -98,7 +98,8 @@ class NumberedCanvas(pdfcanvas.Canvas):
         self.drawRightString(width - MARGIN, y, "ShowStack • showstack.io")
         self.restoreState()
 
-    # project name is injected via a class attribute set per-build
+    # Defaults only. Each build passes its own subclass carrying the project
+    # name; never assign to these on NumberedCanvas itself.
     _report_project_name = ''
     _footer_from_page = 2
 
@@ -344,10 +345,12 @@ def export_system_report(request):
     story += _section_power(project, styles, PowerDistributionPlan)
     story += _section_soundvision(project, styles, SoundvisionPrediction)
 
-    # Stamp the project name onto the footer canvas class for this build.
-    NumberedCanvas._report_project_name = project.name
-
-    doc.multiBuild(story, canvasmaker=NumberedCanvas)
+    # A canvas class per build, so the footer's project name is never shared
+    # state: two reports built at once (or one after the other) cannot print
+    # each other's name. Same pattern as the power-plan PDF below.
+    canvas = type('SystemReportCanvas', (NumberedCanvas,),
+                  {'_report_project_name': project.name})
+    doc.multiBuild(story, canvasmaker=canvas)
 
     pdf = buffer.getvalue()
     buffer.close()
