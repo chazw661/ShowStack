@@ -24,10 +24,14 @@ Where a feed comes from, best first:
              dimmed, on each channel here it fits, naming the channels or the
              consoles, and counted on none. Never a conflict.
 
-Inputs have an A and a B source. A port whose name is the channel's Source (B)
-is that channel's B feed. A link always means A: the stored link has no A/B.
-Two or more ports LINKED to one channel is a CONFLICT and each is flagged;
-names alone never make one.
+Inputs have an A and a B source, each its own stored link:
+``DeviceInput.console_input`` is A, ``console_input_b`` is B. Names only ever
+find A feeds (BY_NAME / AMBIGUOUS above); a B feed is always LINKED, and a
+channel's Source (B) text matches nothing. A B feed on the port that is also
+this channel's A is flagged ``same_port`` (allowed: real consoles do it).
+Two or more ports LINKED to one channel's A, or to its B, is a CONFLICT and
+each is flagged; names alone never make one. (B refuses a second port when
+it is written; a conflict is one that slipped through.)
 
 Outputs follow the same link / name rules. A bus feeding several I/O outputs
 is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux,
@@ -66,12 +70,19 @@ class Port:
     name: str
     link: tuple | None   # inputs: (console id, channel pk); outputs: (content type id, pk)
     pk: int = 0          # the DeviceInput / DeviceOutput row
+    link_b: tuple | None = None   # inputs: the B link, (console id, channel pk)
 
     @property
     def free(self):
-        """Free = no name and no link. The one definition, used by the
-        free-ports block and by the picker on the Console page."""
+        """Free = no name and no A link: what the A picker on the Console
+        page may patch. A port that is only some channel's B is still free
+        for A (the picker shows its use)."""
         return not self.name and not self.link
+
+    @property
+    def unused(self):
+        """Free and no B link either: what the free-ports block counts."""
+        return self.free and not self.link_b
 
 
 @dataclass
@@ -84,6 +95,7 @@ class Feed:
     across: bool = False # for AMBIGUOUS: ``others`` are consoles, not channels
     unsaved: bool = False  # LINKED, but the port's name is not the channel's
     saved_name: str = ''   # saved name (device_patch.name_not_saved)
+    same_port: bool = False  # a B feed whose port is this channel's A too
 
     @property
     def url(self):
@@ -97,6 +109,10 @@ class Cell:
     @property
     def conflict(self):
         return any(f.conflict for f in self.feeds)
+
+    def only(self, slot):
+        """This cell with only its A (or only its B) feeds. Outputs are all A."""
+        return Cell([f for f in self.feeds if f.slot == slot])
 
 
 def compress(numbers):
@@ -137,25 +153,41 @@ class PortIndex:
                 .filter(device__project_id=self.project_id, input_number__isnull=False)
                 .order_by('device__name', 'device_id', 'input_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
-                             'console_input__console_id', 'console_input_id', 'pk'))
-        return _ports(rows)
+                             'console_input__console_id', 'console_input_id', 'pk',
+                             'console_input_b__console_id', 'console_input_b_id'))
+        ports = []
+        for _, device_rows in groupby(rows, key=lambda r: r[0]):
+            for number, (device_id, device_name, name, ct_id, pk, row_pk,
+                         b_console, b_pk) in enumerate(device_rows, 1):
+                ports.append(Port(device_id, device_name, number, (name or '').strip(),
+                                  (ct_id, pk) if pk else None, row_pk,
+                                  (b_console, b_pk) if b_pk else None))
+        return ports
+
+    @cached_property
+    def channel_labels(self):
+        """{ConsoleInput pk: (console id, console name, 'Ch 3')} for the
+        project's channels: how a picker names the channel a port feeds."""
+        rows = (ConsoleInput.objects.filter(console__project_id=self.project_id)
+                .values_list('pk', 'console_id', 'console__name', 'input_ch'))
+        return {pk: (cid, cname, f'Ch {ch}') for pk, cid, cname, ch in rows}
 
     # -- names on every console ----------------------------------------------
     #
     # norm(name) -> {console id: console name}, for every non-template
     # console in the project. Only read when an unlinked port's name matches
-    # a channel here, so a fully linked show never pays for it.
+    # a channel here, so a fully linked show never pays for it. A channel's
+    # A name only: Source (B) is text, and never finds a port.
 
     @cached_property
     def input_names(self):
         rows = (ConsoleInput.objects
                 .filter(console__project_id=self.project_id, console__is_template=False)
-                .values_list('console_id', 'console__name', 'source', 'source_b'))
+                .values_list('console_id', 'console__name', 'source'))
         names = {}
-        for console_id, console_name, *values in rows:
-            for value in values:
-                if norm(value):
-                    names.setdefault(norm(value), {})[console_id] = console_name
+        for console_id, console_name, value in rows:
+            if norm(value):
+                names.setdefault(norm(value), {})[console_id] = console_name
         return names
 
     @cached_property
@@ -229,13 +261,16 @@ class PortIndex:
         cells = {c.pk: Cell() for c in channels}
         saved = {c.pk: c.source for c in channels}
         labels = {c.pk: f'ch {c.input_ch}' for c in channels}
-        by_name = {}  # name -> {channel pk: slot}; A wins over B on one channel
+        by_name = {}  # A name -> {channel pk: 'A'}
         for c in channels:
-            for value, slot in ((c.source_b, 'B'), (c.source, 'A')):
-                if norm(value):
-                    by_name.setdefault(norm(value), {})[c.pk] = slot
+            if norm(c.source):
+                by_name.setdefault(norm(c.source), {})[c.pk] = 'A'
 
         for port in self.inputs:
+            # B: the stored link, never a name.
+            if port.link_b and port.link_b[1] in cells:
+                same = bool(port.link) and port.link[1] == port.link_b[1]
+                cells[port.link_b[1]].feeds.append(Feed(port, LINKED, 'B', same_port=same))
             # An input link is stored as (console id, channel pk). Linked
             # elsewhere means not here, whatever the name.
             if port.link:
@@ -320,7 +355,7 @@ class PortIndex:
                     'inputs': [], 'outputs': [], 'input_total': 0, 'output_total': 0,
                 })
                 d[side[:-1] + '_total'] += 1
-                if port.free:
+                if port.unused if side == 'inputs' else port.free:
                     d[side].append(port.number)
         summaries = []
         for d in sorted(devices.values(), key=lambda d: (d['name'].casefold(), d['id'])):
@@ -337,12 +372,14 @@ class PortIndex:
 
 def feed_label(feed, side):
     """One feed as plain text, the way its Patch cell reads on the Console
-    page: "B: Stage Box A · In 3 — by name". ``side`` is 'In' or 'Out'. The
+    page: "Stage Box A · In 3 — by name", "B: Stage Box A · In 5". ``side`` is 'In' or 'Out'. The
     caption is the cell's (name not saved / by name / ambiguous (...)), and a
     conflict, amber on the page, says so. The console PDF prints these."""
     text = f'{feed.port.device_name} · {side} {feed.port.number}'
     if feed.slot == 'B':
         text = 'B: ' + text
+    if feed.same_port:
+        text += ' — same port as A'
     if feed.unsaved:
         text += ' — name not saved'
     elif feed.how == BY_NAME:

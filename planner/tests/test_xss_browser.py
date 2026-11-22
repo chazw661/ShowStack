@@ -466,6 +466,54 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
                          'kept AVB slot')
         self.assert_text(page, '.wd-switch', 'Show network feeds', 'network switch')
 
+    def test_names_in_the_b_input_view_device_b_picker_and_b_links(self):
+        # B-patch PR: Source (B) and channel names with markup, in the Console
+        # page's B view (A name column, Patch (B) cell, Source (B) field), the
+        # I/O device page's B picker, and the diagram's B line label and its
+        # Connections table row.
+        from planner.models import Console, ConsoleInput, Device, DeviceInput
+        desk = Console.objects.create(project=self.project, name=QUOTED)
+        long_b = f'{QUOTED} {NAME} ' * 4
+        kick = ConsoleInput.objects.create(console=desk, input_ch='1', source=NAME,
+                                           source_b=long_b)
+        box = Device.objects.create(project=self.project, name=NAME, input_count=2,
+                                    console_connection='analog')
+        DeviceInput.objects.create(device=box, input_number=1, signal_name=NAME, console_input=kick)
+        DeviceInput.objects.create(device=box, input_number=2, signal_name=QUOTED,
+                                   console_input_b=kick)
+
+        page = self.open(reverse('admin:planner_console_change', args=[desk.pk]))
+        page.click('.ab-input-toggle__btn:has-text("B Inputs")')
+        self.assert_text(page, '#consoleinput_set-group td.field-a_name', NAME, 'A name column')
+        self.assert_text(page, '#consoleinput_set-group td.field-patch_b', NAME, 'Patch (B) cell')
+        self.assert_text(page, '#consoleinput_set-group td.field-source_b input', long_b.strip(),
+                         'Source (B) field')
+        self.assertEqual(page.evaluate(
+            "document.querySelector('#consoleinput_set-group td.field-patch_b .ss-patch-edit')"
+            ".getAttribute('title').includes('<img')"), True)
+
+        page = self.open(reverse('admin:planner_device_change', args=[box.pk]))
+        self.assert_text(page, 'select.ss-b-pick option', f'Ch 1 · {NAME}', 'device B picker')
+        self.assert_text(page, 'select.ss-b-pick optgroup', '', 'device B picker group')
+        self.assertEqual(page.evaluate(
+            "document.querySelector('select.ss-b-pick optgroup').label"), QUOTED)
+
+        url = reverse('planner:wiring_diagram')
+        for view in ('overview', 'analog'):
+            page = self.open(url + f'?view={view}')
+            page.wait_for_selector('svg.wd-svg')
+            self.assert_text(page, '#wd-connections td', 'Ch 1 (B)', f'{view}: B row')
+            self.assert_text(page, '#wd-connections td', QUOTED, f'{view}: B row console')
+            self.assertGreater(page.evaluate(
+                "document.querySelectorAll('svg.wd-svg path.wd-edge.b').length"), 0)
+        # A short Source (B) is drawn on the line itself.
+        short = '"><b>B</b>'
+        ConsoleInput.objects.filter(pk=kick.pk).update(source_b=short)
+        page = self.open(url)
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-label.b', f'In 2 → Ch 1 (B) · {short}', 'B label')
+        self.assertEqual(page.evaluate("document.querySelectorAll('svg.wd-svg b').length"), 0)
+
     def test_the_download_pdf_panel_with_hostile_names(self):
         # PR: wiring PDF. The panel sends the ticked tabs, network=0 when
         # unticked, the paper and the browser's time zone; the PDF it gets

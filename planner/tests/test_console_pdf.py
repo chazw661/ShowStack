@@ -19,7 +19,7 @@ from django.urls import reverse
 from PyPDF2 import PdfReader
 
 from planner.models import (
-    ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput,
+    ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput, DeviceInput,
 )
 from planner.tests.test_console_patch import PatchBase
 from planner.utils.pdf_exports.console_pdf import console_sections
@@ -168,7 +168,7 @@ class PatchColumnTests(ConsolePdfBase):
 
     def test_patch_values_match_the_page(self):
         host = self.ch(self.foh, 1, 'Host Mic')
-        self.ch(self.foh, 2, 'Lectern', source_b='Lectern B')
+        lectern = self.ch(self.foh, 2, 'Lectern', source_b='Lectern B')
         self.ch(self.foh, 3, 'Spare')
         self.ch(self.foh, 4, 'Spare')
         self.ch(self.foh, 5, 'Shared')
@@ -176,7 +176,10 @@ class PatchColumnTests(ConsolePdfBase):
         renamed = self.ch(self.foh, 6, 'Guitar')
         self.port(self.box_a, 1, 'Host Mic', host)        # linked
         self.port(self.box_b, 1, 'Host Mic', host)        # linked twice: conflict
-        self.port(self.box_b, 2, 'Lectern B')             # B, by name
+        self.port(self.box_b, 2, 'Lectern B')             # named after Source (B): nothing
+        self.port(self.box_b, 3, '')                      # the stored B
+        DeviceInput.objects.filter(device=self.box_b, input_number=3).update(
+            console_input_b=lectern)
         self.port(self.box_a, 2, 'Spare')                 # ambiguous on this console
         self.port(self.box_a, 3, 'Shared')                # ambiguous across consoles
         self.port(self.box_a, 4, 'Bass', renamed)         # linked, name not saved
@@ -206,7 +209,7 @@ class PatchColumnTests(ConsolePdfBase):
         # And the page says what we think it says.
         self.assertEqual(printed[('Console Inputs', '1')],
                          ['Stage Box A · In 1 — CONFLICT', 'Stage Box B · In 1 — CONFLICT'])
-        self.assertEqual(printed[('Console Inputs', '2')], ['B: Stage Box B · In 2 — by name'])
+        self.assertEqual(printed[('Console Inputs', '2')], ['B: Stage Box B · In 3'])
         self.assertEqual(printed[('Console Inputs', '3')],
                          ['Stage Box A · In 2 — ambiguous (ch 3, ch 4)'])
         self.assertEqual(printed[('Console Inputs', '5')],

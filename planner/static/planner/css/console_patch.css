@@ -68,6 +68,8 @@ body.model-console.change-form #consolestereooutput_set-group {
 @container ss-grid (width < 1030px) {
     body:not(.ss-patch-on) #consoleinput_set-group th.column-patch,
     body:not(.ss-patch-on) #consoleinput_set-group td.field-patch,
+    body:not(.ss-patch-on) #consoleinput_set-group th.column-patch_b,
+    body:not(.ss-patch-on) #consoleinput_set-group td.field-patch_b,
     body.ss-patch-on #consoleinput_set-group th.column-source_hardware,
     body.ss-patch-on #consoleinput_set-group td.field-source_hardware,
     body.ss-patch-on #consoleinput_set-group th.column-source_hardware_b,
@@ -118,7 +120,9 @@ body.model-console.change-form #consolestereooutput_set-group {
 }
 
 .inline-group table th.column-patch,
-.inline-group table td.field-patch {
+.inline-group table td.field-patch,
+.inline-group table th.column-patch_b,
+.inline-group table td.field-patch_b {
     width: var(--ss-col-patch) !important;
     min-width: var(--ss-col-patch) !important;
     max-width: var(--ss-col-patch) !important;
@@ -128,7 +132,9 @@ body.model-console.change-form #consolestereooutput_set-group {
     vertical-align: middle !important;
     position: relative;   /* anchors the touch target below */
 }
-.inline-group table td.field-patch p {
+.inline-group table td.field-patch p,
+.inline-group table td.field-patch_b p,
+.inline-group table td.field-a_name p {
     /* Django wraps a readonly value in <p>; it has no business adding margin. */
     margin: 0 !important;
     padding: 0 !important;
@@ -267,7 +273,11 @@ body.model-console.change-form #consolestereooutput_set-group {
 body.model-console .inline-group td.field-patch .ss-patch-conflict a,
 body.model-console .inline-group td.field-patch .ss-patch-conflict a:visited,
 body.model-console .inline-group td.field-patch .ss-patch-conflict a span,
-body.model-console .inline-group td.field-patch .ss-patch-conflict .ss-patch-link span {
+body.model-console .inline-group td.field-patch .ss-patch-conflict .ss-patch-link span,
+body.model-console .inline-group td.field-patch_b .ss-patch-conflict a,
+body.model-console .inline-group td.field-patch_b .ss-patch-conflict a:visited,
+body.model-console .inline-group td.field-patch_b .ss-patch-conflict a span,
+body.model-console .inline-group td.field-patch_b .ss-patch-conflict .ss-patch-link span {
     color: var(--ss-patch-amber) !important;
 }
 
@@ -411,6 +421,7 @@ body.model-console .inline-group td.field-patch .ss-patch-conflict .ss-patch-lin
     content: none !important;
 }
 td.field-patch .ss-pp-flash::after,
+td.field-patch_b .ss-pp-flash::after,
 .ss-pp-flash .ss-patch-edit::after {
     animation: ss-pp-flash 1.2s ease-out;
 }
@@ -619,3 +630,23 @@ html.ss-pp-open body {
 }
 .ss-pp-choice + .ss-pp-note,
 .ss-pp-choice .ss-pp-note { margin-top: 8px; }
+
+/* --- B view (console_ab_toggle.js): the A name, read-only, beside Source (B).
+ * Greedy like Source so the two share the room Source has in the A view. */
+.inline-group table th.column-a_name,
+.inline-group table td.field-a_name {
+    width: 100% !important;
+    text-align: left !important;
+    vertical-align: middle !important;
+    color: #aaa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* A B feed on the port that is this channel's A too: allowed, but said. */
+.ss-patch-caption.ss-patch-same {
+    color: var(--ss-patch-amber);
+}
+.ss-pp-port.is-warn {
+    border-color: var(--ss-patch-amber) !important;
+}

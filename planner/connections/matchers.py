@@ -230,7 +230,8 @@ class ProjectIndex:
         self.project = project
         self.nodes = {}               # node id -> Node
         self.ports = {}               # port ref -> Port
-        self.device_inputs = []       # (Port, linked ConsoleInput Port or None)
+        self.device_inputs = []       # (Port, linked ConsoleInput Port or None) -- A
+        self.device_inputs_b = []     # (Port, B ConsoleInput Port, Source (B) text)
         self.device_outputs = []      # (Port, linked bus ref or '')
         self.matrices = []            # (Port, destination text)
         self.processor_inputs = []    # Port
@@ -317,9 +318,13 @@ class ProjectIndex:
                 .order_by('device_id', 'input_number', 'pk')
                 .values_list('pk', 'device_id', 'signal_name', 'console_input_id',
                              'console_input__console_id', 'console_input__input_ch',
-                             'console_input__dante_number'))
+                             'console_input__dante_number',
+                             'console_input_b_id', 'console_input_b__console_id',
+                             'console_input_b__input_ch', 'console_input_b__dante_number',
+                             'console_input_b__source_b'))
         position = defaultdict(int)
-        for pk, device_id, name, ci_pk, console_id, input_ch, dante in rows:
+        for (pk, device_id, name, ci_pk, console_id, input_ch, dante,
+             b_pk, b_console, b_ch, b_dante, source_b) in rows:
             position[device_id] += 1
             port = self._port(Port(ep.port_ref('deviceinput', pk),
                                    ep.node_id(ep.DEVICE, device_id),
@@ -333,6 +338,13 @@ class ProjectIndex:
                                           ep.console_input_label(input_ch, dante, ci_pk),
                                           pk=ci_pk))
             self.device_inputs.append((port, channel))
+            # B: its own stored link (never a name), drawn as its own line.
+            if b_pk and ep.node_id(ep.CONSOLE, b_console) in self.nodes:
+                channel_b = self._port(Port(ep.port_ref('consoleinput', b_pk),
+                                            ep.node_id(ep.CONSOLE, b_console),
+                                            ep.console_input_label(b_ch, b_dante, b_pk),
+                                            pk=b_pk))
+                self.device_inputs_b.append((port, channel_b, (source_b or '').strip()))
 
         rows = (DeviceOutput.objects
                 .filter(device__project_id=pid, output_number__isnull=False)

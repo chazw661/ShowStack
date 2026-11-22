@@ -23,6 +23,11 @@ later "patch from the console page" all agree:
     filled when the channel is named and saved. A linked port with a blank name
     is still used, not free.
 
+B inputs: ``DeviceInput.console_input_b`` is the B link, set by its own
+picker (``link_input_port_b``) and never by name. It writes no name and
+leaves the A link alone, as every A rule above leaves B alone. One B source
+per channel (``b_taken``); a port may be A and B of the same channel.
+
 A link is written as a short reference string -- ``in:<pk>``, ``aux:<pk>``,
 ``mtx:<pk>``, ``st:<pk>`` -- which is what the combobox carries in a hidden field. It is
 always resolved inside one project: a reference to another project's channel,
@@ -182,6 +187,23 @@ def link_input_port(device_input, channel, name=''):
     saved) and may be blank. Does not save."""
     device_input.console_input = channel
     device_input.signal_name = (name or '').strip()
+
+
+def link_input_port_b(device_input, channel):
+    """Make ``device_input`` the B feed of ``channel`` (None clears it).
+
+    B is the stored ``console_input_b`` link and nothing else: the port's
+    name and its A link are A's, and never change here. Does not save."""
+    device_input.console_input_b = channel
+
+
+def b_taken(channel, exclude=()):
+    """Another port already feeding ``channel`` as B, or None. A channel has
+    at most one B source; the forms and the Console-page picker ask this
+    before writing (there is no DB constraint -- see the model)."""
+    return (DeviceInput.objects.select_related('device')
+            .filter(console_input_b=channel).exclude(pk__in=list(exclude))
+            .order_by('pk').first())
 
 
 def link_output_port(device_output, bus, name=''):

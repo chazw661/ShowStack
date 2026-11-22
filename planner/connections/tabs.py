@@ -15,6 +15,10 @@ draw each as its own section.
              Console connection set is kept and flagged ``connection_unset``.
   speakers   PA cable runs only: amps and racks -> speakers.
 
+B input links (``edge['b']``) are console links like A's: they follow their
+device's Console connection onto Dante or Analogue/AES, so a device patched
+only on B is on its tab.
+
 Only the nodes an edge reaches are kept (Dante also keeps its devices with
 no link yet). An I/O device's ``ports`` are counted from the kept edges, so
 it gets only the inputs / outputs box the tab uses.
@@ -33,7 +37,8 @@ TABS = (
     (SPEAKERS, 'Speaker cables'),
 )
 TAB_KEYS = tuple(key for key, _ in TABS)
-CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceOutput.console_output')
+CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceInput.console_input_b',
+                       'DeviceOutput.console_output')
 CABLE_FEEDS = ('analog', 'aes')
 SPEAKER_LABEL_MAX = 560     # two or three columns: room for the whole cable label
 
@@ -104,8 +109,10 @@ def _ip_line(node):
 
 
 def _ports(edges, device_id):
-    refs = [l.get(f'{end}_ref') or '' for e in edges for l in e.get('links', ())
-            for end in ('from', 'to') if device_id in (e['from'], e['to'])]
+    # A set: a port that is A of one channel and B of another (or of the
+    # same one) is one input on the box, not two.
+    refs = {l.get(f'{end}_ref') or '' for e in edges for l in e.get('links', ())
+            for end in ('from', 'to') if device_id in (e['from'], e['to'])}
     return {'inputs': sum(r.startswith('deviceinput:') for r in refs),
             'outputs': sum(r.startswith('deviceoutput:') for r in refs)}
 
@@ -135,6 +142,15 @@ def without_network(graph):
         out_nodes.append(node)
     kept = {e['id'] for e in edges}
     return {**graph, 'nodes': out_nodes, 'edges': edges,
+            'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
+
+
+def without_b(graph):
+    """The graph with no B input links: what Download PDF draws (the PDF has
+    no style for them yet). Nodes are kept; each tab still picks its own."""
+    edges = [e for e in graph['edges'] if not e.get('b')]
+    kept = {e['id'] for e in edges}
+    return {**graph, 'edges': edges,
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
 
 

@@ -17,6 +17,12 @@
  * Opening the picker refreshes the cell too, so a stale row corrects itself
  * the moment it is touched.
  *
+ * B (Patch (B) column, `d.slot === 'B'`): the stored B link only. It never
+ * sends or changes a name, offers Replace but never Add (one B source per
+ * channel), and a pick of this channel's own A port asks first ("same port
+ * as A"). Every used port shows its use as the server words it ("B for Ch 5",
+ * "A for Ch 3"), in the A picker too.
+ *
  * A patch carries the channel's name as typed in its row, saved or not. If
  * that name is not saved yet, leaving the page while it is still unsaved
  * asks first (beforeunload): the port has the typed name, and only saving
@@ -222,10 +228,12 @@
         say(data.message || 'Nothing was changed.', status === 409 ? 'warn' : 'error');
     }
 
+    function isB(d) { return d.slot === 'B'; }
+
     function send(action, port, mode) {
         say('');
         request('POST', { action: action, port: port, mode: mode || '', state: ctx.data.state,
-                          name: rowName() || '' });
+                          name: isB(ctx.data) ? '' : (rowName() || '') });
     }
 
     // The row's Source (inputs) or Name (buses) field, or null.
@@ -248,6 +256,7 @@
     }
 
     function nameNote(d) {
+        if (isB(d)) return '';    // B never names the port
         var typed = rowName(), saved = d.channel.name;
         if (typed === null) typed = saved;
         if (!typed) {
@@ -267,7 +276,7 @@
     function render() {
         var d = ctx.data;
         panel.title.textContent = d.channel.console + ' · ' + d.channel.label +
-            (d.channel.name ? ' · ' + d.channel.name : '');
+            (isB(d) ? ' (B)' : '') + (d.channel.name ? ' · ' + d.channel.name : '');
         var body = panel.body;
         body.textContent = '';
         var note = nameNote(d);
@@ -305,12 +314,12 @@
             var text = el('div', 'ss-pp-feed-text');
             text.appendChild(a);
             var notes = [];
-            if (f.slot === 'B') notes.push('B input — by name, edit it on the device page');
-            else if (f.how === 'by_name') notes.push('by name, not linked');
+            if (f.same_port) notes.push('same port as A');
+            if (f.how === 'by_name') notes.push('by name, not linked');
             else if (f.how === 'ambiguous') notes.push('ambiguous (' + f.others.join(', ') + ') — not this channel’s');
             if (f.unsaved) notes.push('name not saved: the port is “' + f.port_name + '”, the channel’s saved name is ' +
                 (f.saved_name ? '“' + f.saved_name + '”' : 'blank'));
-            if (f.conflict) notes.push('CONFLICT: more than one port linked');
+            if (f.conflict) notes.push('CONFLICT: more than one port linked' + (isB(d) ? ' as B' : ''));
             if (f.lock) notes.push(f.lock);
             if (notes.length) text.appendChild(el('div', 'ss-pp-note', notes.join(' · ')));
             row.appendChild(text);
@@ -358,17 +367,19 @@
         sec.appendChild(head);
         var grid = el('div', 'ss-pp-grid');
         dev.ports.forEach(function (p) {
-            var cls = 'ss-pp-port' + (p.free ? ' is-free' : ' is-used') + (p.mine ? ' is-mine' : '');
+            var cls = 'ss-pp-port' + (p.free ? ' is-free' : ' is-used') + (p.mine ? ' is-mine' : '') +
+                (p.warn ? ' is-warn' : '');
             var b = button(cls, '', p.free ? function () { pick(d, dev, p); } : null);
             b.appendChild(el('span', 'ss-pp-port-n', String(p.number)));
-            var name = p.mine ? 'here' : (p.name || (p.linked ? '(linked)' : ''));
-            if (!p.free) b.appendChild(el('span', 'ss-pp-port-name', name));
+            var name = p.mine ? 'here' : p.use;
+            if (p.warn) name = name ? name + ' · ' + p.warn : p.warn;
+            if (name) b.appendChild(el('span', 'ss-pp-port-name', name));
             if (!p.free) {
                 b.disabled = true;
                 b.setAttribute('aria-disabled', 'true');
             }
             b.title = portLabel(d.side, dev.name, p.number) +
-                (p.lock ? ' — ' + p.lock : p.free ? ' — free' : ' — ' + name);
+                (p.lock ? ' — ' + p.lock : name ? ' — ' + name : p.free ? ' — free' : '');
             grid.appendChild(b);
         });
         sec.appendChild(grid);
@@ -376,7 +387,7 @@
     }
 
     function pick(d, dev, p) {
-        if (!d.has_current) { send('patch', p.id, ''); return; }
+        if (!d.has_current && !p.warn) { send('patch', p.id, ''); return; }
         ctx.pending = { device: dev, port: p };
         render();
     }
@@ -386,13 +397,28 @@
         var target = portLabel(d.side, pending.device.name, pending.port.number);
         var current = d.feeds.filter(function (f) { return f.can_unpatch; })
             .map(function (f) { return portLabel(d.side, f.device, f.number); });
-        sec.appendChild(el('p', 'ss-pp-choice-text',
-            d.channel.label + ' is already patched to ' + current.join(' and ') + '.'));
+        if (pending.port.warn) {
+            sec.appendChild(el('p', 'ss-pp-msg is-warn',
+                target + ' is ' + d.channel.label + '’s A input too (same port as A). ' +
+                'Allowed — a console can take one port on A and B.'));
+        }
+        if (current.length) {
+            sec.appendChild(el('p', 'ss-pp-choice-text', d.channel.label + (isB(d) ? ' (B)' : '') +
+                ' is already patched to ' + current.join(' and ') + '.'));
+        }
         var row = el('div', 'ss-pp-choice-row');
-        row.appendChild(button('ss-pp-primary', 'Replace with ' + target, function () {
-            send('patch', pending.port.id, 'replace');
-        }));
-        if (d.side === 'In') {
+        if (!current.length) {
+            row.appendChild(button('ss-pp-primary', 'Patch ' + target + ' as B', function () {
+                send('patch', pending.port.id, '');
+            }));
+        } else {
+            row.appendChild(button('ss-pp-primary', 'Replace with ' + target, function () {
+                send('patch', pending.port.id, 'replace');
+            }));
+        }
+        if (isB(d)) {
+            // One B source per channel: no Add.
+        } else if (d.side === 'In') {
             row.appendChild(button('ss-pp-warn', 'Add as second (conflict)', function () {
                 send('patch', pending.port.id, 'add');
             }));
@@ -406,7 +432,10 @@
             render();
         }));
         sec.appendChild(row);
-        if (d.side === 'In') {
+        if (isB(d) && current.length) {
+            sec.appendChild(el('p', 'ss-pp-note',
+                'Replace frees ' + current.join(' and ') + ' from B. A channel has one B source.'));
+        } else if (d.side === 'In' && current.length) {
             sec.appendChild(el('p', 'ss-pp-note',
                 'Replace frees ' + current.join(' and ') + '. Add keeps both: two ports on one input is shown as a conflict.'));
         }

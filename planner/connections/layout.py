@@ -636,6 +636,8 @@ def _classes(edge):
         out.append('ambiguous')
     if edge.get('connection_unset'):
         out.append('unset')
+    if edge.get('b'):
+        out.append('b')         # a B input link: drawn lighter (svg.STYLE)
     return tuple(out)
 
 

@@ -3,7 +3,9 @@
 ``project_graph(project)`` merges:
 
   confirmed  what is stored as a link today --
-             * DeviceInput.console_input       (I/O input -> console channel)
+             * DeviceInput.console_input       (I/O input -> console channel, A)
+             * DeviceInput.console_input_b     (the same, B: its own edges,
+               ``b: true``, labelled "In 5 → Ch 3 (B) · <Source (B)>")
              * DeviceOutput's generic FK       (console bus -> I/O output)
              * PA cable runs entered with an end: from the amp (or, with no
                amp, the amp rack) to each linked array, else to the typed
@@ -96,6 +98,8 @@ class Link:
     cable_label: str = ''       # PA runs: "HR · 2× NL 8 75'"
     to_slot: str = ''           # the amp / processor input slot it lands on
     note: str = ''              # after the source ports on a slotted label: "Out 17 · AES"
+    b: bool = False             # a B input link (DeviceInput.console_input_b)
+    source_b: str = ''          # its channel's Source (B), for the label
 
 
 def _cable_for(transport):
@@ -287,6 +291,11 @@ class _Graph:
                 self.links.append(Link(port.node, channel.node, port, channel,
                                        source=('fk', 'DeviceInput.console_input'),
                                        **self.console_transport(port.node)))
+        for port, channel, source_b in idx.device_inputs_b:
+            self.links.append(Link(port.node, channel.node, port, channel,
+                                   source=('fk', 'DeviceInput.console_input_b'),
+                                   b=True, source_b=source_b,
+                                   **self.console_transport(port.node)))
         for port, bus in idx.device_outputs:
             if bus:
                 bus_port = idx.ports[bus]
@@ -481,7 +490,8 @@ def _label_parts(links):
     groups = defaultdict(lambda: ([], []))
     for link in links:
         key = (link.from_port.label.prefix if link.from_port else None,
-               link.to_port.label.prefix if link.to_port else None)
+               link.to_port.label.prefix if link.to_port else None,
+               link.b, link.source_b)
         froms, tos = groups[key]
         if link.from_port and link.from_port.label not in froms:
             froms.append(link.from_port.label)
@@ -492,7 +502,12 @@ def _label_parts(links):
     notes = {l.note for l in links}
     note = notes.pop() if len(notes) == 1 else ''
     phrases = []
-    for froms, tos in groups.values():
+    for (_, _, b, source_b), (froms, tos) in groups.items():
+        if b:
+            # A B link reads like A's, plus " (B)" and its Source (B) if set.
+            phrase = f'{_runs(froms)} → {_runs(tos)} (B)'
+            phrases.append(f'{phrase} · {source_b}' if source_b else phrase)
+            continue
         if slotted:
             # An AVB output into an amp is a stream: "Stream 3", not "AVB 3".
             froms = [ep.PortLabel(STREAM, f.number) if f.prefix == 'AVB' else f for f in froms]
@@ -612,15 +627,15 @@ def project_graph(project, index=None, matches=None):
     grouped = defaultdict(list)
     for link in g.links:
         grouped[(link.from_node, link.to_node, link.status, link.network,
-                 link.unlinked, link.to_slot)].append(link)
+                 link.unlinked, link.to_slot, link.b)].append(link)
 
     def order(item):
-        (frm, to, status, network, unlinked, slot), _ = item
+        (frm, to, status, network, unlinked, slot, b), _ = item
         return (_node_order(nodes, frm), _node_order(nodes, to),
-                slot_order.get((to, slot), -1), status, network, unlinked)
+                slot_order.get((to, slot), -1), status, network, unlinked, b)
 
     edges, warnings = [], []
-    for n, ((frm, to, status, network, unlinked, slot), links) in enumerate(
+    for n, ((frm, to, status, network, unlinked, slot, b), links) in enumerate(
             sorted(grouped.items(), key=order), 1):
         links.sort(key=lambda l: (_sort_key(l.from_port.label) if l.from_port else (),
                                   _sort_key(l.to_port.label) if l.to_port else ()))
@@ -639,6 +654,10 @@ def project_graph(project, index=None, matches=None):
         }
         if slot:
             edge['to_slot'] = slot
+        if b:
+            # Its own line, lighter than A's (layout._classes: 'b').
+            edge['b'] = True
+            edge['to_ports'] = f"{edge['to_ports']} (B)"
         rules = sorted({l.rule for l in links if l.rule})
         if rules:
             edge['rules'] = rules

@@ -149,16 +149,14 @@ class InputCellTests(PatchBase):
         ])
         self.assertFalse(cell.conflict)
 
-    def test_b_source_is_a_b_feed_not_a_conflict(self):
+    def test_source_b_name_is_never_a_b_feed(self):
+        # B is the stored link only: a port named after Source (B) is nothing.
         lectern = self.ch(self.foh, 25, 'Lectern', source_b='Lectern B')
         self.port(self.box_a, 1, 'Lectern', lectern)
         self.port(self.box_b, 1, 'Lectern B')
         cell = self.cells(self.foh)['25']
-        self.assertEqual(self.summary(cell), [
-            ('Stage Box A', 1, LINKED, 'A', False),
-            ('Stage Box B', 1, BY_NAME, 'B', False),
-        ])
-        self.assertFalse(cell.conflict)
+        self.assertEqual(self.summary(cell), [('Stage Box A', 1, LINKED, 'A', False)])
+        self.assertEqual(cell.only('B').feeds, [])
 
     def test_duplicate_name_is_ambiguous_on_every_channel_it_fits(self):
         self.ch(self.foh, 90, 'Spare')
@@ -198,11 +196,13 @@ class InputCellTests(PatchBase):
                              (AMBIGUOUS, True, ('FOH', 'MON')))
             self.assertFalse(cell.conflict)
 
-    def test_other_consoles_b_name_makes_it_ambiguous_too(self):
+    def test_other_consoles_source_b_text_does_not_make_an_a_name_ambiguous(self):
+        # Source (B) is text: it no longer competes with an A name anywhere.
         self.ch(self.foh, 1, 'Lectern B')
         self.ch(self.mon, 1, 'Lectern', source_b='Lectern B')
         self.port(self.box_b, 1, 'Lectern B')
-        self.assertEqual(self.cells(self.foh)['1'].feeds[0].how, AMBIGUOUS)
+        self.assertEqual(self.cells(self.foh)['1'].feeds[0].how, BY_NAME)
+        self.assertEqual(self.cells(self.mon)['1'].feeds, [])
 
     def test_unlinked_name_only_on_another_console_does_not_show_here(self):
         self.ch(self.foh, 33, 'Choir 1')
@@ -309,17 +309,22 @@ class ConsolePageTests(PatchBase):
         self.port(self.box_a, 1, 'Host Mic', host)
         self.port(self.box_b, 1, 'Host Mic', host)
         self.port(self.box_b, 2, 'Lectern B')
+        DeviceInput.objects.filter(device=self.box_b, input_number=4).update(
+            console_input_b=ConsoleInput.objects.get(console=self.foh, input_ch='2'))
         page = self.client.get(self.url(self.foh)).content.decode()
         self.assertIn('<th class="column-patch', page)
+        self.assertIn('<th class="column-patch_b', page)
+        self.assertIn('<th class="column-a_name', page)
         # A superuser can patch, so each cell is the picker's button and the
         # feeds are text (the read-only cell is in test_console_patch_picker).
         self.assertIn('<span class="ss-patch-link"><span class="ss-patch-dev">Stage Box A</span>'
                       '<span class="ss-patch-port"> · In 1</span></span>', page)
         self.assertEqual(page.count('ss-patch-conflict'), 2)
+        # The stored B (In 4), not the port named after Source (B) (In 2).
         self.assertRegex(page, r'ss-patch-tag-b">B</span><span class="ss-patch-link">'
                                r'<span class="ss-patch-dev">Stage Box B</span>'
-                               r'<span class="ss-patch-port"> · In 2</span></span>'
-                               r'<span class="ss-patch-caption">by name</span>')
+                               r'<span class="ss-patch-port"> · In 4</span></span>')
+        self.assertNotIn('<span class="ss-patch-port"> · In 2</span>', page)
         # A name on two consoles: dimmed, consoles named, not amber.
         self.ch(self.foh, 4, 'Shared')
         self.ch(self.mon, 1, 'Shared')
@@ -332,7 +337,8 @@ class ConsolePageTests(PatchBase):
         self.assertIn('console_patch.css', page)
         self.assertIn('class="ss-patch-none"', page)
         self.assertIn('I/O devices · free ports', page)
-        self.assertRegex(page, r'<strong>5</strong> free inputs: 4-8')
+        # In 4 carries only a B link: used, not free.
+        self.assertRegex(page, r'<strong>4</strong> free inputs: 5-8')
 
     def test_add_page_has_no_patch_column(self):
         page = self.client.get(reverse('admin:planner_console_add')).content.decode()
