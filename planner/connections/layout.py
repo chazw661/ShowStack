@@ -2,8 +2,9 @@
 
 ``layout(graph)`` takes ``graph.project_graph()``'s dict and returns a
 ``Layout``: boxes, group headers and routed edges in diagram units (px at
-100%). No Django, no queries and no markup, so the screen view (``svg``) and a
-later 11x17 PDF draw the same picture.
+100%). No Django, no queries and no markup, so the screen view (``svg``) and
+the PDF (``utils/pdf_exports/wiring_pdf``, paged by ``tiling``) draw the same
+picture.
 
 Seven fixed columns, signal flowing left to right:
 
@@ -33,7 +34,7 @@ of its neighbours in the column before (then after). In the amp column the
 sort is only within a location group; groups never move.
 
 A box's lines meet it on port slots SLOT apart. Amps and processors have
-named input slots (the graph's ``slots``: "XLR 1", "AES 2 → Ch 2–3"), drawn
+named input slots (the graph's ``slots``: "XLR 1 ← Y001 Out 3 (Left)"), drawn
 inside the box's left edge in input order, and an edge lands on its
 ``to_slot``; elsewhere a box has one slot per line, ordered to cross least.
 
@@ -50,7 +51,8 @@ LABEL_LINES_MAX lines, is drawn as a key: a small boxed "[1]" badge on the
 line itself, just right of the source box, in a row tall enough (KEY_ROW)
 that the badge clears its neighbours; it is listed in the page's
 Connections table (``Layout.keys``). Box titles, subtitles, extra lines,
-slot names and group headers wrap at BOX_W; a wrapped slot is taller.
+slot names and group headers wrap at BOX_W; a wrapped slot is taller. Two
+column titles carry a hint line under them (COLUMN_HINTS).
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -59,6 +61,10 @@ from statistics import mean
 IO_IN, CONSOLE, IO_OUT, PROCESSOR, FEEDS, AMP, SPEAKER = range(7)
 COLUMN_TITLES = ('Device inputs', 'Console', 'Device outputs', 'Processors', 'Unlinked feeds',
                  'Amps', 'Speakers')
+# A second, smaller line under a column title, for readers new to the split
+# I/O device: which side a source plugs into, which side feeds the rest.
+COLUMN_HINTS = {'Device inputs': '(mics & sources plug in here)',
+                'Device outputs': '(feeds processors, amps, IEMs)'}
 HIDDEN_WHEN_EMPTY = (PROCESSOR, FEEDS)
 ALL_COLUMNS = tuple(range(len(COLUMN_TITLES)))
 
@@ -73,7 +79,9 @@ PAD = 8             # below the last slot
 GAP_Y = 18          # between boxes in a column
 GROUP_HEAD = 24     # an amp location's header
 MARGIN = 24
-TITLE_H = 30        # column titles
+TITLE_H = 42        # column titles, and the hint line under two of them
+TITLE_Y = 12        # a column title's baseline below MARGIN
+HINT_Y = 26         # its hint's baseline
 TRACK = 8           # between vertical tracks in a gap
 LABEL_PAD = 10
 CHAR_W = 6.4        # 11px label text, a generous average

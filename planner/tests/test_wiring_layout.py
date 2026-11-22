@@ -365,11 +365,19 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 3, avb_stream='AVB 3 - Delay')
         self.draw()
         box = self.boxes[self.amp_id]
-        # the rack view's rows: channel n's AVB stream, XLR and AES inputs
-        self.assertEqual(box.slots, ['AVB 3', 'XLR 1', 'AES 2'])
-        self.assertEqual(box.h, L.HEAD + 3 * L.SLOT + L.PAD)
+        # the rack view's rows: channel n's AVB stream, XLR and AES inputs, each
+        # with its whole patch (PR: wiring PDF, item 6)
+        self.assertEqual(box.slots, ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
+                                     'XLR 1 ← Stage Box Out 1 (Fill)',
+                                     'AES 2 ← SL P1 AES 1 (Main L)'])
+        # a slot too long for one line wraps, and its row grows with it
+        self.assertEqual(box.h, L.HEAD + sum(L.SLOT + L.SLOT_LH * (len(lines) - 1)
+                                             for lines in box.slot_lines) + L.PAD)
+        self.assertGreater(len(box.slot_lines[0]), 1)
+        self.assertEqual([' '.join(lines) for lines in box.slot_lines], box.slots)
         self.assert_on_slots(box)
-        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['AES 1', 'AVB 3', 'Out 1'])
+        # the source end stays short; an AVB output is a stream
+        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['AES 1', 'Out 1', 'Stream 3'])
 
     def test_edge_labels_into_amps_have_no_channel(self):
         self.device_output(self.box, 1, 'Fill')
@@ -395,7 +403,8 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 4, analog_input='Fill')
         self.draw()
         box = self.boxes[self.amp_id]
-        self.assertEqual(box.slots, ['AVB 1 → Ch 1–2', 'XLR 1 → Ch 1–2, 4'])
+        self.assertEqual(box.slots, ['AVB ← “Nope” (not linked) · Ch 1–2',
+                                     'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2, 4'])
         self.assertEqual(len(self.into(self.amp_id)), 2)
         self.assert_on_slots(box)
 
@@ -407,7 +416,8 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 3, analog_input='Left')
         self.draw()
         box = self.boxes[self.amp_id]
-        self.assertEqual(box.slots, ['XLR 1 → Ch 1, 3', 'XLR 2'])
+        self.assertEqual(box.slots, ['XLR 1 ← Stage Box Out 1 (Left) · Ch 1, 3',
+                                     'XLR 2 ← Stage Box Out 2 (Right)'])
         self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['Out 1', 'Out 2'])
         self.assert_on_slots(box)
 
@@ -430,7 +440,12 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         root = ET.fromstring(svg.render(self.draw()))
         slots = {t.get('data-slot'): t.text for t in root.iter(f'{SVG_NS}text')
                  if t.get('class') == 'p'}
-        self.assertEqual(slots, {'XLR 1 → Ch 1–2': 'XLR 1 → Ch 1–2', 'AES 1': 'AES 1'})
+        # a wrapped slot is drawn as tspans; its text reads whole
+        full = {t.get('data-slot'): ''.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')
+                if t.get('class') == 'p'}
+        self.assertEqual(full, {'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2':
+                                'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2', 'AES 1': 'AES 1'})
+        self.assertEqual(slots['AES 1'], 'AES 1')
 
     def test_boxes_with_no_inputs_have_no_slots(self):
         self.amp_channel(self.amp_, 1)

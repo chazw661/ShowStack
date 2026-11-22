@@ -60,6 +60,17 @@
   .wd-keybadge { display: inline-block; font-weight: 700; color: #fff; border: 1.2px solid #ddd;
                  border-radius: 3px; padding: 0 4px; line-height: 1.4; }
   .wd-print-tab { display: none; }
+  .wd-digest { color: #999; font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+  .wd-pdf { position: relative; }
+  .wd-pdf summary { list-style: none; display: inline-block; }
+  .wd-pdf summary::-webkit-details-marker { display: none; }
+  .wd-pdf-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 230px;
+                  background: var(--ss-raised); border: 1px solid var(--ss-border); border-radius: 6px;
+                  padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+  .wd-pdf-panel fieldset { border: 0; margin: 0 0 8px; padding: 0; }
+  .wd-pdf-panel legend { color: #aaa; font-size: 11px; font-weight: 600; padding: 0; margin-bottom: 4px;
+                         text-transform: uppercase; letter-spacing: .04em; }
+  .wd-pdf-panel label { display: block; color: #eee; font-size: 13px; margin: 2px 0; }
   @media print {
     #header, #nav-sidebar, #toggle-nav-sidebar, .breadcrumbs, #footer,
     .wd-tabs, .wd-bar { display: none !important; }
@@ -108,6 +119,23 @@
          href="?view=overview{% if network %}&amp;network=0{% endif %}"><span class="knob" aria-hidden="true"></span>Show network feeds{% if hidden_network %} ({{ hidden_network }} hidden){% endif %}</a>
       {% endif %}
       <span class="wd-counts">{{ counts.boxes }} boxes · {{ counts.confirmed }} confirmed · {{ counts.inferred }} inferred · {{ counts.unlinked }} not linked</span>
+      <span class="wd-digest" title="Names this exact wiring: a printout with the same graph number shows the same thing">Graph {{ digest }}</span>
+      <details class="wd-pdf" id="wd-pdf">
+        <summary class="wd-toggle">Download PDF</summary>
+        <form class="wd-pdf-panel" method="get" action="{{ pdf_url }}" id="wd-pdf-form">
+          <fieldset><legend>Tabs</legend>
+            {% for t in tabs %}<label><input type="checkbox" name="tabs" value="{{ t.key }}" checked> {{ t.label }}</label>{% endfor %}
+          </fieldset>
+          <fieldset><legend>Overview</legend>
+            <label><input type="checkbox" name="network" value="1" checked> Network feeds</label>
+          </fieldset>
+          <fieldset><legend>Paper</legend>
+            {% for key, label in papers %}<label><input type="radio" name="paper" value="{{ key }}"{% if forloop.first %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </fieldset>
+          <input type="hidden" name="tz" value="">
+          <button type="submit" class="wd-toggle">Download</button>
+        </form>
+      </details>
     </div>
     <div class="wd-legend" aria-label="Legend">
       <span><i></i>Confirmed (linked on a page)</span>
@@ -153,6 +181,22 @@
 {{ block.super }}
 <script>
 (function () {
+  // Download PDF: the panel's form carries the browser's time zone, and
+  // network=0 when its box is unticked (an unticked box sends nothing).
+  var form = document.getElementById('wd-pdf-form');
+  if (form) {
+    form.addEventListener('submit', function () {
+      try { form.elements.tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+      var net = form.querySelector('input[name=network]');
+      if (net && !net.checked) {
+        var off = document.createElement('input');
+        off.type = 'hidden'; off.name = 'network'; off.value = '0';
+        form.appendChild(off);
+      }
+      var shown = form.querySelectorAll('input[name=tabs]:checked').length;
+      if (!shown) form.querySelectorAll('input[name=tabs]').forEach(function (b) { b.checked = true; });
+    });
+  }
   var button = document.getElementById('wd-toggle');
   var box = document.getElementById('wd-scroll');
   if (!button || !box) return;

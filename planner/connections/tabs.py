@@ -126,7 +126,9 @@ def without_network(graph):
             slots = []
             for slot in node['slots']:
                 feeds = sources.get((node['id'], slot['id']))
-                if feeds:
+                if feeds and ' ← ' in slot['label']:      # an amp slot already names its source
+                    slot = {**slot, 'kept': True}
+                elif feeds:
                     slot = {**slot, 'label': f"{slot['label']} ← {', '.join(feeds)}", 'kept': True}
                 slots.append(slot)
             node = {**node, 'slots': slots}

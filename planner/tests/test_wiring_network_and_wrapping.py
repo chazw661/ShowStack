@@ -1,6 +1,7 @@
 """Wiring Diagram PR 3.3: the "Show network feeds" toggle, and nothing cut
 short (wrapped labels, keys and the Connections table). Amp input slots
-stay numbered ("XLR n", "AES n", "AVB n"): L-Acoustics panels are numbered.
+stay numbered ("XLR n", "AES n"): L-Acoustics panels are numbered. Since the
+wiring PDF PR they also name their source; an AVB slot names its stream.
 
 Run with::
 
@@ -56,7 +57,10 @@ class LAmpSlotsStayNumberedTests(ConnectionFixtures, TestCase):
         self.amp_channel(amp, 4, analog_input='Fill')
         graph = project_graph(self.project)
         node = next(n for n in graph['nodes'] if n['id'] == f'amp:{amp.pk}')
-        self.assertEqual([s['label'] for s in node['slots']], ['AVB 3', 'XLR 1 → Ch 1, 4', 'AES 2'])
+        self.assertEqual([s['label'] for s in node['slots']],
+                         ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
+                          'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1, 4',
+                          'AES 2 ← SL P1 AES 1 (Main L)'])
         drawn = next(b for b in L.layout(graph).boxes if b.node == node['id'])
         self.assertEqual(drawn.slots, [s['label'] for s in node['slots']])
         self.assertNotIn('IN ', ' '.join(texts(svg.render(L.layout(graph)))))
@@ -105,7 +109,9 @@ class NetworkToggleTests(NetworkShow, TestCase):
         self.assertNotIn(' network"', svg)
         self.assertNotIn('Dante Box', ''.join(re.findall(r'<g class="wd-link".*?</g>', svg)))
         slots = [t for t in texts(svg) if t.startswith(('AVB', 'AES'))]
-        self.assertIn('AVB 1 ← SL P1 AVB 2', slots)     # channel 1's AVB row
+        # channel 1's AVB row still names its stream, once
+        self.assertTrue(any(t.startswith('AVB ← SL P1 stream 2') for t in slots), slots)
+        self.assertNotIn('Stream 2', ' '.join(slots))
         self.assertIn('AES 1', slots)
 
     def test_the_layout_is_recomputed(self):

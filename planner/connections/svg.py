@@ -2,7 +2,7 @@
 
 Every name in it is user data (device names, labels, PA Destination text, amp
 input text), so every text node and attribute value goes through ``_e`` --
-input slot labels too, though today they are built from numbers. No
+input slot labels too, which name their source ("XLR 1 ← Y001 Out 3 (Left)"). No
 script, no external references; the styles are inline so the file stands on
 its own. Nothing is shortened: ``layout`` has wrapped every text into lines,
 and a line or tspan is drawn per line. Each box and line keeps its full text
@@ -10,12 +10,13 @@ in a ``<title>``, the hover tooltip.
 """
 from html import escape
 
-from planner.connections.layout import (BOX_W, GROUP_HEAD, KEY_PAD, LABEL_LH, LINE_H, MARGIN,
-                                        SLOT_LH)
+from planner.connections.layout import (BOX_W, COLUMN_HINTS, GROUP_HEAD, HINT_Y, KEY_PAD, LABEL_LH,
+                                        LINE_H, MARGIN, SLOT_LH, TITLE_Y)
 
 STYLE = """
 .wd-bg { fill: #ffffff; }
 .wd-col { font: 600 12px system-ui, -apple-system, sans-serif; fill: #555; letter-spacing: .04em; text-transform: uppercase; }
+.wd-col-hint { font: italic 10px system-ui, -apple-system, sans-serif; fill: #666; }
 .wd-group { font: 600 11px system-ui, -apple-system, sans-serif; fill: #333; }
 .wd-group-rule { stroke: #bbb; stroke-width: 1; }
 .wd-box rect { fill: #f4f7fb; stroke: #4a6f9a; stroke-width: 1.4; }
@@ -117,7 +118,10 @@ def render(lay, title=''):
            f'<style>{STYLE}</style>',
            f'<rect class="wd-bg" width="{w}" height="{h}"/>']
     for text, x, _ in lay.columns:
-        out.append(f'<text class="wd-col" x="{_n(x)}" y="{_n(MARGIN + 12)}">{_e(text)}</text>')
+        out.append(f'<text class="wd-col" x="{_n(x)}" y="{_n(MARGIN + TITLE_Y)}">{_e(text)}</text>')
+        if text in COLUMN_HINTS:
+            out.append(f'<text class="wd-col-hint" x="{_n(x)}" y="{_n(MARGIN + HINT_Y)}">'
+                       f'{_e(COLUMN_HINTS[text])}</text>')
     for group in lay.groups:
         y = group.y + GROUP_HEAD - 8
         last = y + LINE_H * (len(group.lines) - 1)
