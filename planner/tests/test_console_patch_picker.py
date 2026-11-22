@@ -517,7 +517,7 @@ class UnpatchTests(PickerBase):
         self.post(self.st_l, self.out(1), action='unpatch')
         self.assertIsNone(self.out(1).object_id)
 
-    def test_ambiguous_and_b_feeds_are_not_unpatched_here(self):
+    def test_ambiguous_and_source_b_names_are_not_unpatched_here(self):
         ConsoleInput.objects.create(console=self.foh, input_ch='90', source='Spare')
         spare = ConsoleInput.objects.create(console=self.foh, input_ch='91', source='Spare')
         DeviceInput.objects.filter(pk=self.inport(1).pk).update(signal_name='Spare')
@@ -528,7 +528,8 @@ class UnpatchTests(PickerBase):
         data = self.picker(spare)
         self.assertEqual([f['can_unpatch'] for f in data['feeds']], [False])
         self.assertEqual(self.post(spare, self.inport(1), action='unpatch').status_code, 409)
-        self.assertEqual(self.picker(self.snare)['feeds'][0]['slot'], 'B')
+        # A port named after Source (B) is no feed at all, A or B.
+        self.assertEqual(self.picker(self.snare)['feeds'], [])
         self.assertEqual(self.post(self.snare, self.inport(2), action='unpatch').status_code, 409)
         self.assertEqual(self.snapshot(), before)
 

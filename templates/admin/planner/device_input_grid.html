@@ -19,6 +19,40 @@
     box-sizing: border-box;
     text-align: left;   /* a signal name, not a number */
   }
+  /* The B picker (forms.DeviceInputInlineForm.b_ref): narrow, under the A
+     name. Desktop admin only; /m/ has no B editing. */
+  .device-input-cell .ss-b-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+  }
+  .device-input-cell .ss-b-row label {
+    flex: none;
+    font-size: 10px;
+    font-weight: bold;
+    color: #aaa;
+  }
+  .device-input-cell select.ss-b-pick {
+    flex: 1 1 auto;
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 11px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 1px 2px !important;
+  }
+  .device-input-cell .ss-b-note,
+  .device-input-cell .errorlist {
+    margin: 2px 0 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: left;
+    color: #f5a524;
+    list-style: none;
+  }
+  .device-input-cell .errorlist { color: #ff6b6b; }
   /* A linked port whose name the console has not saved (forms._show_link). */
   .device-input-cell .ss-link-note {
     margin-top: 3px;
@@ -76,6 +110,13 @@
 
                   {{ form.signal_name }}
                   {% if form.link_note %}<div class="ss-link-note">{{ form.link_note }}</div>{% endif %}
+                  {% if form.b_ref %}
+                    <div class="ss-b-row">
+                      <label for="{{ form.b_ref.id_for_label }}">B</label>{{ form.b_ref }}
+                    </div>
+                    {{ form.b_ref.errors }}
+                    {% if form.b_note %}<div class="ss-b-note">{{ form.b_note }}</div>{% endif %}
+                  {% endif %}
                 </td>
               {% endfor %}
             </tr>

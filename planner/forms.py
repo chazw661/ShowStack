@@ -513,6 +513,64 @@ def _show_link(form, channel_name, label):
                           if channel_name else f'name not saved — {label} is unnamed')
 
 
+def device_input_b_choices(project_id):
+    """The B picker's options on the I/O device page: every channel on the
+    project's (non-template) consoles, one group per console, each reading
+    "FOH Ch 3 · Kick" -- the console (a closed select shows no group) and
+    the A name, for reference. Unnamed channels are listed
+    too: a B can be patched before the channel is named. Built once per
+    formset (``DeviceInputInline``), not once per port."""
+    choices = [('', '—')]
+    if not project_id:
+        return choices
+    rows = (ConsoleInput.objects
+            .filter(console__project_id=project_id, console__is_template=False)
+            .annotate(_ch_num=_numeric_channel_order('input_ch'))
+            .order_by('console__name', 'console_id', '_ch_num', 'input_ch', 'pk')
+            .values_list('console_id', 'console__name', 'pk', 'input_ch', 'source'))
+    groups = {}
+    for console_id, console_name, pk, input_ch, source in rows:
+        label = (f'{console_name} Ch {input_ch}'
+                 + (f' · {source.strip()}' if (source or '').strip() else ''))
+        groups.setdefault((console_id, console_name), []).append((str(pk), label))
+    choices += [(name, options) for (_, name), options in groups.items()]
+    return choices
+
+
+def _b_label(channel):
+    name = (channel.source or '').strip()
+    return f'{channel.console.name} Ch {channel.input_ch}' + (f' ({name})' if name else '')
+
+
+class DeviceInputInlineFormSet(forms.BaseInlineFormSet):
+    """One B source per channel, across the whole project: two ports of this
+    device, or a port here and one on another device, may not both be a
+    channel's B. Checked here, not by the DB, so moving a B from In 3 to
+    In 1 in one save is fine (see DeviceInput.console_input_b)."""
+
+    def clean(self):
+        super().clean()
+        claimed = {}     # channel pk -> first form claiming it
+        mine = [f.instance.pk for f in self.forms if f.instance.pk]
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data') or self._should_delete_form(form):
+                continue
+            channel = form.cleaned_data.get('b_ref')
+            if channel is None:
+                continue
+            if channel.pk in claimed:
+                form.add_error('b_ref', f'{_b_label(channel)} already has a B source on this '
+                                        f'device (In {claimed[channel.pk]}). A channel has one '
+                                        'B source.')
+                continue
+            claimed[channel.pk] = form.cleaned_data.get('input_number') or '?'
+            other = device_patch.b_taken(channel, exclude=mine)
+            if other is not None:
+                form.add_error('b_ref', f'{_b_label(channel)} is already B on '
+                                        f'{other.device.name} In {other.input_number}. '
+                                        'A channel has one B source.')
+
+
 class DeviceInputInlineForm(forms.ModelForm):
     """Inline form for I/O Device Inputs.
 
@@ -531,6 +589,10 @@ class DeviceInputInlineForm(forms.ModelForm):
     """
 
     link_ref = forms.CharField(required=False, widget=forms.HiddenInput)
+    # The B picker: a channel pk, resolved inside the project in clean_b_ref.
+    # Choices come from the formset (device_input_b_choices), once per page.
+    b_ref = forms.ChoiceField(required=False, label='B', choices=[('', '—')],
+                              widget=forms.Select(attrs={'class': 'ss-b-pick'}))
 
     class Meta:
         model = DeviceInput
@@ -545,11 +607,26 @@ class DeviceInputInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         project_id = kwargs.pop('project_id', None)
+        b_choices = kwargs.pop('b_choices', None)
         super().__init__(*args, **kwargs)
         self.project_id = project_id
         self.fields['input_number'].required = False
         self.fields['signal_name'].required = False
         self.input_suggestions = _device_input_suggestions(project_id)
+
+        # B: its own stored link, never the name.
+        if b_choices is None:
+            b_choices = device_input_b_choices(project_id)
+        b_channel = self.instance.console_input_b if self.instance.console_input_b_id else None
+        if b_channel is not None:
+            self.initial['b_ref'] = str(b_channel.pk)
+            listed = {v for _, opts in b_choices[1:] for v, _ in opts}
+            if str(b_channel.pk) not in listed:   # a template console's, say: keep it shown
+                b_choices = b_choices + [(str(b_channel.pk), _b_label(b_channel))]
+        self.fields['b_ref'].choices = b_choices
+        self.fields['b_ref'].widget.attrs['title'] = 'B input: the channel this port feeds as B'
+        self.b_note = ('same port as A' if b_channel is not None
+                       and self.instance.console_input_id == b_channel.pk else '')
 
         # (DeviceInputInline select_related()s console_input and its console.)
         channel = self.instance.console_input if self.instance.console_input_id else None
@@ -559,6 +636,20 @@ class DeviceInputInlineForm(forms.ModelForm):
             _show_link(self, channel.source, f'{channel.console.name} Ch {channel.input_ch}')
         self.fields['signal_name'].widget.attrs['data-link-field'] = self['link_ref'].auto_id
 
+    def clean_b_ref(self):
+        """The project's ConsoleInput the B picker names, or None. A pk from
+        another project (or deleted meanwhile) is an error: unlike link_ref
+        this field is the one the engineer sees and can correct."""
+        value = self.cleaned_data.get('b_ref') or ''
+        if not value:
+            return None
+        channel = (ConsoleInput.objects.select_related('console')
+                   .filter(pk=value, console__project_id=self.project_id).first()
+                   if value.isdigit() and self.project_id else None)
+        if channel is None:
+            raise forms.ValidationError('That channel is not in this project any more.')
+        return channel
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         channel = device_patch.resolve_input_ref(
@@ -566,6 +657,8 @@ class DeviceInputInlineForm(forms.ModelForm):
         device_patch.apply_input_link(
             instance, self.cleaned_data.get('signal_name'), channel,
             initial_name=self.initial.get('signal_name') or '')
+        if 'b_ref' in self.cleaned_data and not self.fields['b_ref'].disabled:
+            device_patch.link_input_port_b(instance, self.cleaned_data['b_ref'])
         if commit:
             instance.save()
         return instance

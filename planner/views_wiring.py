@@ -13,7 +13,7 @@ table under the diagram lists each key's ends and cable.
 ``wiring_diagram_pdf`` draws the same tabs into one PDF (Download PDF):
 ``?tabs=`` the tabs to include, ``?network=0`` network feeds off,
 ``?paper=11x17`` or ``24x36``, ``?tz=`` the viewer's time zone for the
-printed stamp. Every page names the graph's digest, shown on screen too.
+printed stamp. B input links are on screen only, never in the PDF. Every page names the graph's digest, shown on screen too.
 """
 from datetime import date
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -165,6 +165,7 @@ def tab_view(project, full, tab, network=True):
         'tab_empty': bool(full['nodes']) and not graph['nodes'],
         'tab_empty_text': TAB_EMPTY.get(tab, ''),
         'show_unset_legend': any(e.get('connection_unset') for e in edges),
+        'show_b_legend': any(e.get('b') for e in edges),
         'connections': connection_rows(graph, lay),
         'warnings': warnings_for(graph, lay) + duplicate_warning_rows(project),
         'counts': {
@@ -196,6 +197,7 @@ def wiring_diagram(request):
         'tab_empty': view['tab_empty'],
         'tab_empty_text': view['tab_empty_text'],
         'show_unset_legend': view['show_unset_legend'],
+        'show_b_legend': view['show_b_legend'],
         'network_toggle': tab == T.OVERVIEW,
         'network': network,
         'hidden_network': view['hidden_network'],
@@ -245,7 +247,10 @@ def wiring_diagram_pdf(request):
     network = request.GET.get('network') != '0'
     zone = _zone(request)
     full = project_graph(project)
-    views = [tab_view(project, full, tab, network) for tab in _tabs(request)]
+    # B input links stay on screen only: the PDF leaves them out (the digest
+    # is still the whole graph's, so it matches the screen).
+    printed = T.without_b(full)
+    views = [tab_view(project, printed, tab, network) for tab in _tabs(request)]
     pdf = build_wiring_pdf(project=project, views=views, digest=digest(full), paper=paper,
                            printed=timezone.now().astimezone(zone), empty=not full['nodes'])
     response = HttpResponse(pdf, content_type='application/pdf')

@@ -34,6 +34,8 @@ STYLE = """
 .wd-label.network { fill: #2f855a; }
 .wd-edge.unset { stroke: #7a7a7a; stroke-dasharray: 1 3; stroke-width: 1.8; }
 .wd-label.unset { fill: #6b6b6b; font-style: italic; }
+.wd-edge.b { stroke-opacity: .45; }
+.wd-label.b { fill-opacity: .8; }
 .wd-end { fill: #2b4c7e; }
 .wd-key rect { fill: #ffffff; stroke: #1f2d3d; stroke-width: 1.2; }
 .wd-key text { font: 700 11px system-ui, -apple-system, sans-serif; fill: #111; }

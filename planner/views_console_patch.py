@@ -1,6 +1,7 @@
 """Console page Patch cell: the picker's one endpoint.
 
-GET  -> the picker for one channel (devices, ports, current patch, ``state``)
+GET  -> the picker for one channel (devices, ports, current patch, ``state``).
+        ``kind`` ``in`` is an input's A, ``inb`` its B (the stored B link).
 POST -> patch or unpatch a port, JSON body
         {"action": "patch"|"unpatch", "port": <pk>, "state": "...",
          "mode": "replace"|"add", "name": "<typed in the row, unsaved>"}

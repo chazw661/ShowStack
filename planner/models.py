@@ -116,6 +116,7 @@ class Project(models.Model):
             amp_map = {}
             array_map = {}              # PA cable runs link arrays by these
             port_map = {}               # (model, old pk) -> new row: input picker links
+            channel_map = {}            # old ConsoleInput pk -> new: I/O port A / B links
 
             # 1. Duplicate Locations (needed for other models)
             for location in self.location_set.all():
@@ -151,13 +152,15 @@ class Project(models.Model):
                 )
                 console_map[console.id] = new_console
                 
-                # Duplicate Console Inputs
+                # Duplicate Console Inputs. The map lets the I/O device
+                # ports below keep their A and B links on the copy.
                 for input_obj in console.consoleinput_set.all():
-                    ConsoleInput.objects.create(
+                    channel_map[input_obj.pk] = ConsoleInput.objects.create(
                         console=new_console,
                         dante_number=input_obj.dante_number,
                         input_ch=input_obj.input_ch,
                         source=input_obj.source,
+                        source_b=input_obj.source_b,
                         group=input_obj.group,
                         dca=input_obj.dca,
                         mute=input_obj.mute,
@@ -219,7 +222,9 @@ class Project(models.Model):
                    DeviceInput.objects.create(
                         device=new_device,
                         input_number=device_input.input_number,
-                        signal_name=device_input.signal_name
+                        signal_name=device_input.signal_name,
+                        console_input=channel_map.get(device_input.console_input_id),
+                        console_input_b=channel_map.get(device_input.console_input_b_id),
                     )
                 
                 # Duplicate Device Outputs
@@ -1889,6 +1894,18 @@ class DeviceInput(models.Model):
         blank=True, 
         null=True,
         related_name='device_inputs'
+    )
+    # The channel this port feeds as its B input. Independent of A: a B link
+    # never writes signal_name, and A never writes this. At most one port per
+    # channel (enforced by the forms and the Console-page picker, not the DB,
+    # so a B moved between two ports in one save is not refused).
+    console_input_b = models.ForeignKey(
+        'ConsoleInput',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='device_inputs_b',
+        verbose_name='Console input (B)',
     )
 
     def save(self, *args, **kwargs):

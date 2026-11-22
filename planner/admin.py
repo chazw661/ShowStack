@@ -30,6 +30,7 @@ from .models import MonitorSession, DiscoveredDevice, PollResult, DeviceEvent, P
 from django.urls import path
 
 # Python standard library imports
+import copy
 import csv
 import math
 import json  
@@ -57,7 +58,8 @@ from .models import Presenter
 
 # Form imports
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
-from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
+from .forms import (DeviceInputInlineForm, DeviceInputInlineFormSet, DeviceOutputInlineForm,
+                    device_input_b_choices)
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
@@ -794,9 +796,15 @@ class BaseEquipmentInline(ProjectRoleInlineMixin, admin.TabularInline):
         formset = super().get_formset(request, obj, **kwargs)
         
         if self._user_is_viewer(request, obj):
-            # Make all fields disabled
-            for field_name, field in formset.form.base_fields.items():
+            # Make all fields disabled -- on copies. A form's declared fields
+            # (DeviceInputInlineForm.link_ref / b_ref) are the SAME objects in
+            # every class modelform_factory builds from it, so disabling them
+            # in place left them disabled for the next editor in this worker,
+            # whose picks then saved the initial value.
+            for field_name, field in list(formset.form.base_fields.items()):
+                field = copy.deepcopy(field)
                 field.disabled = True
+                formset.form.base_fields[field_name] = field
         
         return formset
 
@@ -830,18 +838,23 @@ class PatchColumnMixin:
     that opens the picker (planner/utils/console_patch_edit.py,
     console_patch_picker.js); a viewer gets the read-only cell. Decided once
     per request, from the same per-project role check the JSON endpoints use.
+
+    ``patch_columns`` are the read-only columns inserted after ``patch_after``:
+    inputs add ``a_name`` and ``patch_b`` for the B view (console_ab_toggle.js
+    shows one set or the other).
     """
     patch_after = 'name'
+    patch_columns = ('patch',)
 
     def get_readonly_fields(self, request, obj=None):
         fields = tuple(super().get_readonly_fields(request, obj))
-        return fields + ('patch',) if obj is not None else fields
+        return fields + self.patch_columns if obj is not None else fields
 
     def get_fields(self, request, obj=None):
-        fields = [f for f in super().get_fields(request, obj) if f != 'patch']
+        fields = [f for f in super().get_fields(request, obj) if f not in self.patch_columns]
         if obj is not None:
             at = fields.index(self.patch_after) + 1 if self.patch_after in fields else len(fields)
-            fields.insert(at, 'patch')
+            fields[at:at] = list(self.patch_columns)
         return fields
 
     def get_formset(self, request, obj=None, **kwargs):
@@ -866,24 +879,48 @@ class PatchColumnMixin:
 
         return PatchFormSet
 
-    @admin.display(description='Patch')
-    def patch(self, obj):
+    def _patch_cell(self, obj, slot):
         index = getattr(obj, '_ss_patch_index', None)
         if index is None:
             return ''
         cell = index.cell_for(obj)
         if getattr(index, 'editable', False):
             from .utils.console_patch_edit import render_cell
-            return render_cell(obj, cell, editable=True)
+            return render_cell(obj, cell, editable=True, slot=slot)
         return render_to_string('admin/planner/console/_patch_cell.html', {
-            'cell': cell,
+            'cell': cell.only(slot) if cell is not None else None,
+            'slot': slot,
             'side': 'In' if isinstance(obj, ConsoleInput) else 'Out',
         })
+
+    @admin.display(description='Patch')
+    def patch(self, obj):
+        return self._patch_cell(obj, 'A')
+
+    @admin.display(description='Patch (B)')
+    def patch_b(self, obj):
+        """The stored B patch only (DeviceInput.console_input_b): blank until
+        one is set, whatever A is or the names say."""
+        return self._patch_cell(obj, 'B')
+
+    @admin.display(description='A name')
+    def a_name(self, obj):
+        """The channel's A name, read-only, beside the B columns."""
+        return (obj.source or '').strip() or '—'
 
 
 class ConsoleInputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.TabularInline):
     model = ConsoleInput
     patch_after = 'source_b'
+    patch_columns = ('patch', 'a_name', 'patch_b')
+
+    def get_fields(self, request, obj=None):
+        """B view reads: Ch · A name · Source (B) · Patch (B)."""
+        fields = super().get_fields(request, obj)
+        if 'a_name' in fields and 'source_b' in fields:
+            fields.remove('a_name')
+            fields.insert(fields.index('source_b'), 'a_name')
+        return fields
     form = ConsoleInputForm
     extra = 0
     can_delete = True
@@ -1554,6 +1591,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 class DeviceInputInline(BaseEquipmentInline):
     model = DeviceInput
     form = DeviceInputInlineForm
+    formset = DeviceInputInlineFormSet   # one B source per channel
     extra = 0
     ordering = ['input_number']
     template = "admin/planner/device_input_grid.html"
@@ -1562,9 +1600,11 @@ class DeviceInputInline(BaseEquipmentInline):
         """Order by input_number to ensure grid positions match.
 
         console_input is joined because each form shows its linked channel's
-        current name -- one query for the grid, not one per port."""
+        current name -- one query for the grid, not one per port. The B link
+        likewise."""
         qs = super().get_queryset(request)
-        return qs.select_related('console_input__console').order_by('input_number')
+        return qs.select_related('console_input__console',
+                                 'console_input_b__console').order_by('input_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
@@ -1586,10 +1626,15 @@ class DeviceInputInline(BaseEquipmentInline):
                         form.initial.setdefault('input_number', idx + 1)
             
             def get_form_kwargs(self, index):
-                """Pass project_id to each form"""
+                """Pass project_id to each form, and the B picker's options,
+                built once for the whole grid."""
                 kwargs = super().get_form_kwargs(index)
                 if hasattr(self, 'request'):
-                    kwargs['project_id'] = self.request.session.get('current_project_id')
+                    project_id = self.request.session.get('current_project_id')
+                    kwargs['project_id'] = project_id
+                    if not hasattr(self, '_b_choices'):
+                        self._b_choices = device_input_b_choices(project_id)
+                    kwargs['b_choices'] = self._b_choices
                 return kwargs
 
         return InitializingFormSet
@@ -1667,6 +1712,19 @@ class DeviceAdmin(BaseEquipmentAdmin):
             kwargs['form'] = DeviceForm
         return super().get_form(request, obj, **kwargs)
 
+    @staticmethod
+    def _warn_same_port(request, device):
+        """A port that is the A and the B of one channel is allowed (consoles
+        do it) but rarely meant: say so after the save."""
+        from django.db.models import F
+        same = (device.inputs.filter(console_input_b__isnull=False,
+                                     console_input_id=F('console_input_b_id'))
+                .select_related('console_input_b__console').order_by('input_number'))
+        for port in same:
+            ch = port.console_input_b
+            messages.warning(request, f'In {port.input_number} is both A and B of '
+                                      f'{ch.console.name} Ch {ch.input_ch} (same port as A).')
+
     def response_add(self, request, obj, post_url_continue=None):
         # redirect into the change page so the inlines appear.
         change_url = reverse('admin:planner_device_change', args=(obj.pk,))
@@ -1679,7 +1737,9 @@ class DeviceAdmin(BaseEquipmentAdmin):
     
     def save_formset(self, request, form, formset, change):
         super().save_formset(request, form, formset, change)
-        
+        if formset.model is DeviceInput:
+            self._warn_same_port(request, form.instance)
+
         # After saving, ensure all input/output slots exist
         device = form.instance
         if device.pk:

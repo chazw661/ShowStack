@@ -10,7 +10,10 @@
 // visible in both views.
 //
 // Default view is A. The B input is "hardware only" (no separate Dante/Omni
-// patch), so only the Source and Source Hardware columns differ between tabs.
+// patch), so only the Source, Source Hardware and Patch columns differ
+// between tabs. The B view's Patch (B) column is the stored B patch only
+// (DeviceInput.console_input_b), and it shows the channel's A name read-only
+// ("A name") beside Source (B), which stays its own field.
 (function () {
     'use strict';
 
@@ -82,11 +85,17 @@
             '#consoleinput_set-group.ab-show-a th.column-source_b,' +
             '#consoleinput_set-group.ab-show-a td.field-source_b,' +
             '#consoleinput_set-group.ab-show-a th.column-source_hardware_b,' +
-            '#consoleinput_set-group.ab-show-a td.field-source_hardware_b{display:none;}' +
+            '#consoleinput_set-group.ab-show-a td.field-source_hardware_b,' +
+            '#consoleinput_set-group.ab-show-a th.column-a_name,' +
+            '#consoleinput_set-group.ab-show-a td.field-a_name,' +
+            '#consoleinput_set-group.ab-show-a th.column-patch_b,' +
+            '#consoleinput_set-group.ab-show-a td.field-patch_b{display:none !important;}' +
             '#consoleinput_set-group.ab-show-b th.column-source,' +
             '#consoleinput_set-group.ab-show-b td.field-source,' +
             '#consoleinput_set-group.ab-show-b th.column-source_hardware,' +
-            '#consoleinput_set-group.ab-show-b td.field-source_hardware{display:none;}' +
+            '#consoleinput_set-group.ab-show-b td.field-source_hardware,' +
+            '#consoleinput_set-group.ab-show-b th.column-patch,' +
+            '#consoleinput_set-group.ab-show-b td.field-patch{display:none !important;}' +
             '.ab-input-toggle{display:flex;align-items:center;gap:6px;margin:8px 0;}' +
             '.ab-input-toggle__label{font-size:12px;font-weight:bold;color:#eee;margin-right:2px;}' +
             '.ab-input-toggle__btn{padding:3px 12px;font-size:12px;font-weight:bold;cursor:pointer;' +

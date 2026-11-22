@@ -369,7 +369,7 @@ TOPICS = (
         pages=(
             'admin:planner_console_changelist',
         ),
-        keywords=('patch', 'unpatch', 'replace', 'stage box', 'by name', 'ambiguous', 'conflict', 'amber', 'free ports', 'linked', 'name not saved',),
+        keywords=('patch', 'unpatch', 'replace', 'stage box', 'by name', 'ambiguous', 'conflict', 'amber', 'free ports', 'linked', 'name not saved', 'b input', 'patch (b)', 'same port as a',),
     ),
     Topic(
         slug='console-rivage-export',
@@ -422,7 +422,7 @@ TOPICS = (
         pages=(
             'admin:planner_device_changelist',
         ),
-        keywords=('patch', 'stage box', 'inputs', 'link', 'channel', 'suggestions', 'signal name',),
+        keywords=('patch', 'stage box', 'inputs', 'link', 'channel', 'suggestions', 'signal name', 'b input',),
     ),
     Topic(
         slug='io-outputs',

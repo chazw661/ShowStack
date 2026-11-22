@@ -41,6 +41,7 @@
                padding: 10px 14px; margin: 0 0 12px; font-size: 13px; }
   .wd-banner a { color: #ffd27a; }
   .wd-legend i.unset { border-top: 2px dotted #9a9a9a; }
+  .wd-legend i.b { opacity: .45; }
   .wd-switch { color: #eee; font-size: 13px; text-decoration: none; display: inline-flex;
                align-items: center; gap: 8px; }
   .wd-switch .knob { width: 30px; height: 16px; border-radius: 8px; background: #555; position: relative; }
@@ -142,6 +143,7 @@
       <span><i class="inferred"></i>Inferred from labels</span>
       <span><i class="unlinked"></i>? Not linked or ambiguous</span>
       <span><i class="network"></i>AVB / Dante network (no cable)</span>
+      {% if show_b_legend %}<span><i class="b"></i>B input (lighter; labelled “(B)”)</span>{% endif %}
       {% if show_unset_legend %}<span><i class="unset"></i>Console connection not set</span>{% endif %}
     </div>
     <div class="wd-scroll fit" id="wd-scroll">{{ svg }}</div>
