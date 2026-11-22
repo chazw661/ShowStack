@@ -115,9 +115,10 @@ class BFixture:
     def device_url(self, device=None):
         return reverse('admin:planner_device_change', args=[(device or self.box).pk])
 
-    def device_post(self, b=None, a=None, names=None, device=None):
+    def device_post(self, b=None, a=None, names=None, device=None, extra=None):
         """Post the device page with every port as loaded, then ``b`` /
-        ``a`` / ``names`` = {port number: value} on top."""
+        ``a`` / ``names`` = {port number: value} on top, then ``extra``
+        (raw POST keys)."""
         device = device or self.box
         page = self.client.get(self.device_url(device))
         form = page.context['adminform'].form
@@ -151,6 +152,7 @@ class BFixture:
                         data[f'{prefix}-{i}-signal_name'] = names[n]
                         data[f'{prefix}-{i}-link_ref'] = ''
         del form
+        data.update(extra or {})
         return self.client.post(self.device_url(device), data)
 
 
@@ -431,6 +433,45 @@ class DevicePageBTests(BFixture, TestCase):
         self.assertEqual(self.device_post(a={1: self.kick}, b={2: self.snare}).status_code, 302)
         self.assertEqual(self.inport(1).console_input_id, self.kick.pk)
         self.assertEqual(self.inport(2).console_input_b_id, self.snare.pk)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ViewerFieldsDoNotLeakTests(BFixture, TestCase):
+    """BaseEquipmentInline disabled a viewer's fields on the form's declared
+    field objects, which every modelform_factory class built from the form
+    shares -- so after any viewer opened an I/O device page, later editors
+    in the same process got those fields disabled, and a disabled field
+    saves its initial value, not what was posted. One test per inline
+    with declared fields (DeviceInputInline: link_ref + b_ref, above in
+    DevicePageBTests; DeviceOutputInline: link_ref, here)."""
+
+    def viewer_opens_the_device_page(self):
+        viewer = make_user('viewer1', 'free', 'Viewer')
+        ProjectMember.objects.create(user=viewer, project=self.project, role='viewer',
+                                     invited_by=self.owner)
+        self.login(viewer)
+        page = self.client.get(self.device_url()).content.decode()
+        self.assertRegex(page, r'<input type="hidden" name="outputs-0-link_ref"[^>]*disabled')
+        self.login(self.owner)
+
+    def test_an_editor_after_a_viewer_can_still_link_an_output(self):
+        from planner.models import ConsoleAuxOutput
+        aux = ConsoleAuxOutput.objects.create(console=self.foh, aux_number='3', name='Wedge 3')
+        self.viewer_opens_the_device_page()
+        page = self.client.get(self.device_url()).content.decode()
+        self.assertNotRegex(page, r'<input type="hidden" name="outputs-0-link_ref"[^>]*disabled')
+        r = self.device_post(extra={'outputs-0-link_ref': f'aux:{aux.pk}',
+                                    'outputs-0-signal_name': 'Wedge 3'})
+        self.assertEqual(r.status_code, 302)
+        out = DeviceOutput.objects.get(device=self.box, output_number=1)
+        self.assertEqual((out.object_id, out.signal_name), (aux.pk, 'Wedge 3'))
+
+    def test_the_inline_classes_declared_fields_are_never_disabled(self):
+        from planner.forms import DeviceInputInlineForm, DeviceOutputInlineForm
+        self.viewer_opens_the_device_page()
+        for form in (DeviceInputInlineForm, DeviceOutputInlineForm):
+            for name, field in form.declared_fields.items():
+                self.assertFalse(field.disabled, f'{form.__name__}.{name}')
 
 
 class DeleteAndDuplicateTests(BFixture, TestCase):
