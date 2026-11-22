@@ -17,6 +17,8 @@ import io
 import re
 
 from django.contrib.auth.models import User
+from unittest import mock
+
 from django.test import RequestFactory, TestCase
 
 from PyPDF2 import PdfReader
@@ -26,7 +28,8 @@ from planner.models import (
     DeviceOutput, Location, PACableSchedule, Project, SoundvisionPrediction, SpeakerArray,
     SpeakerCabinet,
 )
-from planner.utils.pdf_exports import system_report
+from planner.tests.test_console_inline_str import _BuildAnother
+from planner.utils.pdf_exports import report_kit, system_report
 from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
 from planner.utils.pdf_exports.comm_pdf import generate_comm_beltpacks_pdf
 from planner.utils.pdf_exports.console_pdf import export_console_pdf
@@ -184,3 +187,31 @@ class PdfFooterTests(TestCase):
             lambda s: system_report.export_system_report(self.request(s)),
             first_footer_page=2)
         self.assertGreaterEqual(len(pages), 5)
+
+    def test_console_pdf_built_during_another_keeps_its_own_footer(self):
+        """Two requests overlapping, on a real export: while Alpha's console
+        PDF is being drawn, Bravo's is built start to finish. Alpha's footers
+        are drawn afterwards (at save), and must still say Alpha.
+
+        With the name assigned on the shared NumberedCanvas, every page of
+        Alpha's PDF said "Bravo Gala"."""
+        inner = {}
+        real = report_kit.title_header
+
+        def title_header(*args, **kwargs):
+            story = real(*args, **kwargs)
+            if not inner:                       # the outer (Alpha) build only
+                inner['started'] = True
+                story.append(_BuildAnother(lambda: inner.update(
+                    pages=pages_of(export_console_pdf(self.other.console)))))
+            return story
+
+        with mock.patch.object(report_kit, 'title_header', title_header):
+            own = pages_of(export_console_pdf(self.own.console))
+        self.assertIn('pages', inner, 'the inner build did not run')
+        for pages, name, not_name in ((own, OWN, OTHER), (inner['pages'], OTHER, OWN)):
+            total = len(pages)
+            self.assertGreaterEqual(total, 2)
+            for number, text in enumerate(pages, 1):
+                self.assertRegex(text, re.escape(name) + r'\s*Page %d of %d' % (number, total))
+                self.assertNotIn(not_name, text)
