@@ -24,9 +24,12 @@ Amps and processors have named input slots (PR 3.2), listed in the node's
 ``slots``; an edge into one lands on one slot (``to_slot``) and is labelled
 with its source side only ("Out 1", "AVB 3"), the slot naming the input. A
 processor's slot is its input port ("AES 1", "Analog 2"). An amp's is the
-physical input a source plugs into, numbered by the rack view's input row:
-"XLR n" (analog), "AES n", "AVB n", n the lowest channel that source feeds
-on that transport, and "XLR 1 → Ch 1–2" when it feeds several channels.
+input a source plugs into, with the whole patch for the tech at the amp:
+"XLR n ← Y001 Out 3 (Left)" (analog), "AES n ← ...", n the lowest channel that
+source feeds on that transport, plus "· Ch 1–2" when it feeds several. An AVB
+feed has no input number of its own: "AVB ← SL P1 stream 3 (L Main) · Ch 1".
+Text that names no output reads "AES 1 ← “Left” (not linked)". On the line
+itself an AVB source end says "Stream 3", not "AVB 3".
 
 Each edge also carries ``label_lines``: its label split one line per port
 group ("Aux 1–4 → Out 1–4", "Mtx 1 → Out 5") and per PA run, which the
@@ -56,6 +59,8 @@ Stored Connection rows join in ``_stored_links``: amp inputs linked to their
 source (PR 2b-2) and P1 / Galaxy AES or Analog inputs linked to an I/O or
 console output (PR 2b-3), both confirmed; a linked input is never matched.
 """
+import hashlib
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import groupby
@@ -132,11 +137,42 @@ def _feed_label(field, text):
 
 
 SLOT_PREFIX = {'avb': 'AVB', 'analog': 'XLR', 'aes': 'AES'}   # rack view's row order
+STREAM = 'Stream'           # an AVB source end: the processor's AVB output is a stream
 
 
-def _slots(links, index):
+def _amp_source(link, index, extra_nodes):
+    """Where an amp input's feed comes from, in full: "Y001 Out 3 (Left)",
+    "SL P1 stream 3 (L Main)", or the typed text when it names nothing."""
+    port = link.from_port
+    if port is None:
+        text = (link.text or {}).get('source', '').strip()
+        if not text:
+            text = extra_nodes.get(link.from_node, {}).get('label', '')
+        return f'“{text}” (not linked)'
+    node = index.nodes.get(port.node)
+    owner = node.label if node else ''
+    if port.label.prefix == 'AVB':
+        where = f'{owner} stream {port.label.number}'
+    else:
+        where = f'{owner} {port.label}'
+    name = (port.text or '').strip()
+    return f'{where} ({name})' if name else where
+
+
+def _amp_slot_label(transport, labels, link, index, extra_nodes):
+    first = min(labels, key=_sort_key)
+    source = _amp_source(link, index, extra_nodes)
+    channels = _runs(sorted(labels, key=_sort_key))
+    if transport == 'avb':
+        return f'AVB ← {source} · {channels}'
+    label = f'{SLOT_PREFIX.get(transport, transport)} {first.number} ← {source}'
+    return f'{label} · {channels}' if len(labels) > 1 else label
+
+
+def _slots(links, index, extra_nodes=None):
     """Give every link into an amp or a processor port its ``to_slot``;
     returns {node id: [{'id', 'label'}]}, each node's slots in input order."""
+    extra_nodes = extra_nodes or {}
     kinds = {nid: n.kind for nid, n in index.nodes.items()}
     by_source = defaultdict(list)       # amp: (amp, transport, source) -> links
     named = defaultdict(dict)           # processor: node -> {slot id: (key, label)}
@@ -152,6 +188,7 @@ def _slots(links, index):
             named[link.to_node][link.to_slot] = (_sort_key(link.to_port.label),
                                                   str(link.to_port.label))
     channels = defaultdict(set)         # (amp, slot id) -> channel labels
+    feeder = {}                         # (amp, slot id) -> a link of the source feeding it
     for (amp, transport, _), group in by_source.items():
         labels = {l.to_port.label for l in group}
         first = min(labels, key=_sort_key)
@@ -159,13 +196,12 @@ def _slots(links, index):
         for link in group:
             link.to_slot = slot
         channels[(amp, slot)] |= labels
+        feeder.setdefault((amp, slot), group[0])
     prefixes = list(SLOT_PREFIX)
     for (amp, slot), labels in channels.items():
         transport, number = slot.split(':', 1)
         first = min(labels, key=_sort_key)
-        label = f'{SLOT_PREFIX.get(transport, transport)} {first.number}'
-        if len(labels) > 1:
-            label += f' → {_runs(sorted(labels, key=_sort_key))}'
+        label = _amp_slot_label(transport, labels, feeder[(amp, slot)], index, extra_nodes)
         order = prefixes.index(transport) if transport in prefixes else len(prefixes)
         named[amp][slot] = ((order,) + _sort_key(first), label)
     return {node: [{'id': slot, 'label': label}
@@ -458,6 +494,8 @@ def _label_parts(links):
     phrases = []
     for froms, tos in groups.values():
         if slotted:
+            # An AVB output into an amp is a stream: "Stream 3", not "AVB 3".
+            froms = [ep.PortLabel(STREAM, f.number) if f.prefix == 'AVB' else f for f in froms]
             phrase = ' · '.join(x for x in (_runs(froms), note) if x)
         elif not froms and not tos:
             continue
@@ -538,6 +576,14 @@ def _node_order(nodes, node_id):
     return (KIND_ORDER.get(node.get('kind'), 99), str(node.get('label', '')).casefold(), node_id)
 
 
+def digest(graph):
+    """Eight hex digits naming this exact graph: the same wiring gives the
+    same digest, so two printouts (or a printout and the screen) can be
+    compared at a glance. Every node and edge counts, in canonical JSON."""
+    text = json.dumps(graph, sort_keys=True, separators=(',', ':'), default=str)
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]
+
+
 def project_graph(project, index=None, matches=None):
     index = index or m.ProjectIndex.load(project)
     matches = matches or m.match_all(index)
@@ -548,7 +594,7 @@ def project_graph(project, index=None, matches=None):
     g.rule_a(matches.a)
     g.rule_b(matches.b)
     g.rule_c(matches.c)
-    slots = _slots(g.links, index)
+    slots = _slots(g.links, index, g.extra_nodes)
 
     nodes = {nid: _node_json(n) for nid, n in index.nodes.items()
              if n.kind in ep.DEVICE_KINDS}

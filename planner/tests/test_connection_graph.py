@@ -152,7 +152,7 @@ class GraphTests(ConnectionFixtures, TestCase):
                          (['avb'], None))
         self.assertEqual((by_network[False]['transports'], by_network[False]['cable']),
                          (['aes'], {'recorded': False}))
-        self.assertEqual(by_network[True]['label'], 'AVB 1')
+        self.assertEqual(by_network[True]['label'], 'Stream 1')     # an AVB source end is a stream
 
     def test_amp_input_text_that_matches_nothing_is_an_unlinked_edge(self):
         amp = self.amp('SL LA12X #1')

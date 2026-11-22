@@ -462,8 +462,39 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
 
         page = self.open(url + '?view=overview&network=0')
         page.wait_for_selector('svg.wd-svg')
-        self.assert_text(page, 'svg.wd-svg .wd-box text.p', f'AVB 1 ← {QUOTED}', 'kept AVB slot')
+        self.assert_text(page, 'svg.wd-svg .wd-box text.p', f'AVB ← {QUOTED} stream 1 (Delay)',
+                         'kept AVB slot')
         self.assert_text(page, '.wd-switch', 'Show network feeds', 'network switch')
+
+    def test_the_download_pdf_panel_with_hostile_names(self):
+        # PR: wiring PDF. The panel sends the ticked tabs, network=0 when
+        # unticked, the paper and the browser's time zone; the PDF it gets
+        # back is built from hostile names without a dialog on the page.
+        from planner.models import Device, DeviceOutput
+        self.project.name = QUOTED
+        self.project.save()
+        box = Device.objects.create(project=self.project, name=NAME)
+        DeviceOutput.objects.create(device=box, output_number=1, signal_name=QUOTED)
+        page = self.open(reverse('planner:wiring_diagram'))
+        page.wait_for_selector('svg.wd-svg')
+        page.click('#wd-pdf summary')
+        page.uncheck('input[name=tabs][value=dante]')
+        page.uncheck('input[name=network]')
+        page.check('input[name=paper][value="24x36"]')
+        with page.expect_download() as info:
+            page.click('#wd-pdf-form button[type=submit]')
+        download = info.value
+        query = download.url.split('?', 1)[1]
+        self.assertIn('tabs=overview', query)
+        self.assertNotIn('tabs=dante', query)
+        self.assertIn('network=0', query)
+        self.assertIn('paper=24x36', query)
+        self.assertRegex(query, r'tz=[A-Za-z_]+(%2F|/)?')
+        self.assertTrue(download.suggested_filename.endswith('.pdf'))
+        with open(download.path(), 'rb') as f:
+            self.assertEqual(f.read(5), b'%PDF-')
+        self.assertEqual([], self.dialogs)
+        self.assertEqual(0, page.evaluate("document.querySelectorAll('img[src=\"x\"]').length"))
 
     # -- Dashboard -------------------------------------------------------------
 
