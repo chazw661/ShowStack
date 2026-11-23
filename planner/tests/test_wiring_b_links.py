@@ -205,11 +205,13 @@ class BEdgeTests(BShow, TestCase):
             view = tab_view(self.project, self.graph(), tab)
             b_routes = [route for route in view['layout'].routes if 'b' in route.classes]
             self.assertTrue(b_routes, tab)
-            faded = [e for e in msp.query('LWPOLYLINE') if not e.closed and e.dxf.hasattr('true_color')]
+            # Every line states its own colour; only a B link has the faded one.
+            faded = [e for e in msp.query('LWPOLYLINE')
+                     if not e.closed and e.dxf.true_color == dxf._fade(0x2b4c7e)]
             self.assertEqual(len(faded), len(b_routes), tab)
+            names = dxf.layer_names()
             for line in faded:
-                self.assertIn(line.dxf.layer, (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED), tab)
-                self.assertEqual(line.dxf.true_color, dxf._fade(0x2b4c7e))
+                self.assertIn(line.dxf.layer, [names[r] for r in (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED)], tab)
             texts = [e.plain_text() for e in msp.query('TEXT')]
             self.assertTrue(any('(B)' in t for t in texts if '→' in t), tab)
             self.assertIn(dxf.B_LEGEND[0], texts)
