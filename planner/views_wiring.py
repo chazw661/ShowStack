@@ -13,8 +13,22 @@ table under the diagram lists each key's ends and cable.
 ``wiring_diagram_pdf`` draws the same tabs into one PDF (Download PDF):
 ``?tabs=`` the tabs to include, ``?network=0`` network feeds off,
 ``?paper=11x17`` or ``24x36``, ``?tz=`` the viewer's time zone for the
-printed stamp. B input links are on screen only, never in the PDF. Every page names the graph's digest, shown on screen too.
+printed stamp. B input links are drawn there as on screen: lighter, labelled
+"(B)". Every page names the graph's digest, shown on screen too.
+
+``wiring_diagram_dxf`` (Download DXF, for Vectorworks) writes one ``.dxf``
+per chosen tab, each the whole tab in one drawing (``connections.dxf``); a
+zip when more than one tab is asked for. Same ``?tabs=``, ``?network=`` and
+``?tz=``; ``?arrows=ascii`` writes "<-" / "->" for the arrows.
+
+Both downloads leave the network feeds out unless ``?network=1`` (the
+panel's box, unticked by default); the screen's own toggle is unchanged.
+The panel shows how many diagram pages each tab is at each paper size
+(``download_hints``, from ``connections.tiling``).
 """
+import io
+import re
+import zipfile
 from datetime import date
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -162,9 +176,8 @@ def unset_banner(graph, tab):
             for n in T.unset_devices(graph)]
 
 
-def tab_view(project, full, tab, network=True):
-    """One tab of the project's graph, laid out, with its tables: what the
-    page and the PDF both draw."""
+def tab_layout(full, tab, network=True):
+    """(graph, layout, network feeds hidden) of one tab: no queries."""
     graph = T.graph_view(full, tab)
     if tab in (T.OVERVIEW, T.DANTE):
         graph = T.comms_notes(graph, full)
@@ -172,7 +185,13 @@ def tab_view(project, full, tab, network=True):
     if tab == T.OVERVIEW and not network:
         hidden_network = sum(bool(e.get('network')) for e in graph['edges'])
         graph = T.without_network(graph)
-    lay = layout(graph, **T.layout_options(tab))
+    return graph, layout(graph, **T.layout_options(tab)), hidden_network
+
+
+def tab_view(project, full, tab, network=True):
+    """One tab of the project's graph, laid out, with its tables: what the
+    page, the PDF and the DXF all draw."""
+    graph, lay, hidden_network = tab_layout(full, tab, network)
     edges = graph['edges']
     return {
         'tab': tab,
@@ -207,10 +226,15 @@ def wiring_diagram(request):
     full = project_graph(project)
     network = request.GET.get('network') != '0'
     view = tab_view(project, full, tab, network)
+    hints = download_hints(full)
     context.update({
         'project': project,
         'tab': tab,
-        'tabs': [{'key': key, 'label': label, 'active': key == tab} for key, label in T.TABS],
+        'tabs': [{'key': key, 'label': label, 'active': key == tab, 'pages': hints['tabs'][key]}
+                 for key, label in T.TABS],
+        'page_suggestion': hints['suggestion'],
+        'many_pages': MANY_PAGES,
+        'dxf_url': reverse('planner:wiring_diagram_dxf'),
         'unset': unset_banner(full, tab),
         'tab_empty': view['tab_empty'],
         'tab_empty_text': view['tab_empty_text'],
@@ -234,6 +258,59 @@ def wiring_diagram(request):
 
 
 PAPERS = (('11x17', '11 × 17 in'), ('24x36', '24 × 36 in'))
+MANY_PAGES = 4          # a tab over this many diagram pages at 11 x 17: suggest 24 x 36
+
+
+def pages_text(n):
+    return 'nothing to draw' if not n else f"{n} diagram page{'' if n == 1 else 's'}"
+
+
+def suggestion_text(labels_and_pages):
+    """The panel's hint for the tabs over MANY_PAGES at 11 x 17; '' for none.
+    The panel's script builds the same sentence when a box changes."""
+    return ' '.join(f'{label} is {n} diagram pages at 11 × 17. Try 24 × 36.'
+                    for label, n in labels_and_pages if n > MANY_PAGES)
+
+
+def download_hints(full):
+    """How many pages each tab's diagram takes in the PDF, per paper size
+    (``tiling.plan``; the Connections table and Warnings come after, on
+    pages of their own). {'tabs': {tab: {'text', 'counts'}}, 'suggestion'}:
+    ``counts`` is [(key, n)] with key "<paper>-<network 0/1>", for the
+    panel's script; ``text`` and ``suggestion`` are the panel as it opens:
+    11 x 17, network feeds off."""
+    from planner.utils.pdf_exports.wiring_pdf import diagram_pages
+
+    tabs, first = {}, []
+    for tab, label in T.TABS:
+        by_network = {}
+        for network in (0, 1):
+            if network and tab != T.OVERVIEW:       # only the Overview has the feeds
+                by_network[1] = by_network[0]
+                continue
+            graph, lay, _ = tab_layout(full, tab, bool(network))
+            drawn = bool(lay.boxes) and bool(graph['nodes'] or graph['edges'])
+            by_network[network] = [diagram_pages(lay, paper) if drawn else 0 for paper, _ in PAPERS]
+        counts = [(f'{paper}-{network}', by_network[network][i])
+                  for network in (0, 1) for i, (paper, _) in enumerate(PAPERS)]
+        tabs[tab] = {'text': pages_text(counts[0][1]), 'counts': counts}
+        first.append((label, counts[0][1]))
+    return {'tabs': tabs, 'suggestion': suggestion_text(first)}
+
+
+def _download_network(request):
+    """Network feeds in a download: only when asked for (``network=1``)."""
+    return request.GET.get('network') == '1'
+
+
+_UNSAFE_NAME = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+|\.{2,}')
+
+
+def file_part(text, fallback='project'):
+    """``text`` as part of a file name: no path separators, no control
+    characters, no leading dots; never empty."""
+    name = _UNSAFE_NAME.sub('-', str(text or '')).strip(' .-')[:80].strip(' .-')
+    return name or fallback
 
 
 def _zone(request):
@@ -246,7 +323,7 @@ def _zone(request):
 
 
 def _tabs(request):
-    """The tabs asked for, in the page's order; all four when none is."""
+    """The tabs asked for, in the page's order; every tab when none is."""
     asked = {t.strip() for value in request.GET.getlist('tabs') for t in value.split(',')
              if t.strip()}
     chosen = [key for key in T.TAB_KEYS if key in asked]
@@ -262,16 +339,52 @@ def wiring_diagram_pdf(request):
     if project is None:
         return redirect('planner:wiring_diagram')
     paper = request.GET.get('paper') if request.GET.get('paper') in dict(PAPERS) else PAPERS[0][0]
-    network = request.GET.get('network') != '0'
+    network = _download_network(request)
     zone = _zone(request)
     full = project_graph(project)
-    # B input links stay on screen only: the PDF leaves them out (the digest
-    # is still the whole graph's, so it matches the screen).
-    printed = T.without_b(full)
-    views = [tab_view(project, printed, tab, network) for tab in _tabs(request)]
+    views = [tab_view(project, full, tab, network) for tab in _tabs(request)]
     pdf = build_wiring_pdf(project=project, views=views, digest=digest(full), paper=paper,
                            printed=timezone.now().astimezone(zone), empty=not full['nodes'])
     response = HttpResponse(pdf, content_type='application/pdf')
     name = f'Wiring Diagram - {project.name} - {date.today().isoformat()}.pdf'
+    response['Content-Disposition'] = content_disposition_header(True, name)
+    return response
+
+
+DXF_TYPE = 'image/vnd.dxf'
+
+
+@staff_member_required
+@require_GET
+def wiring_diagram_dxf(request):
+    from planner.connections.dxf import ARROWS_ASCII, build_tab_dxf
+    from planner.utils.pdf_exports.mic_plan_pdf import stamp
+
+    project = _scoped_project(request)
+    if project is None:
+        return redirect('planner:wiring_diagram')
+    zone = _zone(request)
+    arrows = ARROWS_ASCII if request.GET.get('arrows') == ARROWS_ASCII else ''
+    full = project_graph(project)
+    graph_digest = digest(full)
+    printed = stamp(timezone.now().astimezone(zone), zone)
+    stem = f'Wiring Diagram - {file_part(project.name)}'
+    today = date.today().isoformat()
+    files = []
+    for tab in _tabs(request):
+        view = tab_view(project, full, tab, _download_network(request))
+        data = build_tab_dxf(project_name=project.name, view=view, digest=graph_digest,
+                             printed=printed, arrows=arrows, empty=not full['nodes'])
+        files.append((f"{stem} - {file_part(view['tab_label'])} - {today}.dxf", data))
+    if len(files) == 1:
+        name, data = files[0]
+        response = HttpResponse(data, content_type=DXF_TYPE)
+    else:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+            for file_name, data in files:
+                archive.writestr(file_name, data)
+        name = f'{stem} - DXF - {today}.zip'
+        response = HttpResponse(buffer.getvalue(), content_type='application/zip')
     response['Content-Disposition'] = content_disposition_header(True, name)
     return response

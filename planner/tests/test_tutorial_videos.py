@@ -216,7 +216,7 @@ class LabelPageTests(VideoAssertions, TestCase):
             self.assertNotRegex(source, r'for \w+ in messages', name)
 
     def test_alignment_pdf_names_where_to_buy(self):
-        from pypdf import PdfReader
+        from PyPDF2 import PdfReader     # pinned in requirements.txt; pypdf is not
         pdf = render_alignment_pdf(STOCKS['OL3016LP'], Options())
         reader = PdfReader(BytesIO(pdf))
         page = reader.pages[0]
@@ -227,7 +227,7 @@ class LabelPageTests(VideoAssertions, TestCase):
 
     def test_alignment_pdf_without_order_url_has_no_line(self):
         from dataclasses import replace
-        from pypdf import PdfReader
+        from PyPDF2 import PdfReader     # pinned in requirements.txt; pypdf is not
         stock = replace(STOCKS['OL3016LP'], order_url='')
         text = PdfReader(BytesIO(render_alignment_pdf(stock, Options()))).pages[0].extract_text()
         self.assertNotIn('Labels: OnlineLabels', text)

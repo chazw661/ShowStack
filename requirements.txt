@@ -24,3 +24,4 @@ netifaces>=0.11
 requests>=2.33,<3.0
 pysnmp>=7.1,<8.0
 lxml~=5.3.0
+ezdxf==1.4.5
