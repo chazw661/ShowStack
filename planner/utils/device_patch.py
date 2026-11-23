@@ -134,7 +134,7 @@ def sync_port_names(console):
     write(DeviceInput, [
         (pk, (source or '').strip())
         for pk, name, source in DeviceInput.objects
-        .filter(console_input__console=console)
+        .filter(console_input__console=console, device__kind='io')
         .values_list('pk', 'signal_name', 'console_input__source')
         if name_not_saved(name, source)])
 
@@ -146,7 +146,7 @@ def sync_port_names(console):
             (pk, (names[object_id] or '').strip())
             for pk, name, object_id in DeviceOutput.objects
             .filter(content_type=ContentType.objects.get_for_model(model),
-                    object_id__in=names)
+                    object_id__in=names, device__kind='io')
             .values_list('pk', 'signal_name', 'object_id')
             if name_not_saved(name, names[object_id])])
     return fixed

@@ -335,7 +335,7 @@ def apply(kind, channel_pk, project, *, action, port_pk, state, mode='', name=''
                              'This channel is no longer on this console. Reload the page.')
         rows_model = DeviceInput if is_input(channel) else DeviceOutput
         row = (rows_model.objects.select_for_update(of=('self',))
-               .filter(pk=port_pk, device__project=project).first())
+               .filter(pk=port_pk, device__project=project, device__kind='io').first())
         if row is None:
             raise PatchError(404, 'port_gone', 'That port is no longer in this project.')
 

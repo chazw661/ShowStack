@@ -435,6 +435,28 @@ TOPICS = (
         keywords=('outputs', 'aux', 'matrix', 'wedge', 'stage box', 'label', 'link',),
     ),
     Topic(
+        slug='comm-device-add',
+        title='Add a comm device',
+        section='Consoles & I/O',
+        summary='Add an intercom main station with its Dante, 4-wire and 2-wire port counts.',
+        pages=(
+            'admin:planner_device_changelist',
+        ),
+        keywords=('comm', 'intercom', 'arcadia', 'main station', 'dante network', 'add device',
+                  '4-wire', '2-wire',),
+    ),
+    Topic(
+        slug='comm-device-patch',
+        title='Patch a comm device',
+        section='Consoles & I/O',
+        summary='Patch its Dante channels, 4-wire ports and 2-wire ports on its own page.',
+        pages=(
+            'admin:planner_device_changelist',
+        ),
+        keywords=('comms patch', 'intercom', 'arcadia', 'dante', '4w', '4-wire', '2w', '2-wire',
+                  'partyline', 'dante network', 'send', 'receive',),
+    ),
+    Topic(
         slug='console-io-print',
         title='Print console and I/O device sheets',
         section='Consoles & I/O',

@@ -60,6 +60,15 @@ with the ``reason`` it names nothing.
 Stored Connection rows join in ``_stored_links``: amp inputs linked to their
 source (PR 2b-2) and P1 / Galaxy AES or Analog inputs linked to an I/O or
 console output (PR 2b-3), both confirmed; a linked input is never matched.
+
+The comms patch (``_comm_links``; ``connections/comm_patch.py``) is stored
+links too: a comm device's Dante ins / outs and 4-wire ports to and from the
+devices they are patched to, confirmed. Their edges carry ``comm: true``.
+Until the Comms tab draws them they are listed in the Connections table,
+never laid out. A Dante one between devices whose Dante networks are both
+set and differ is in ``warnings`` (kind ``dante_network``). A comm device's
+node carries ``device_kind: 'comm'``; any device with a Dante network set,
+``dante_network``.
 """
 import hashlib
 import json
@@ -99,6 +108,8 @@ class Link:
     to_slot: str = ''           # the amp / processor input slot it lands on
     note: str = ''              # after the source ports on a slotted label: "Out 17 · AES"
     b: bool = False             # a B input link (DeviceInput.console_input_b)
+    comm: bool = False          # a comms patch link: listed, not drawn
+    networks: tuple = ()        # its two Dante networks, when they differ
     source_b: str = ''          # its channel's Source (B), for the label
 
 
@@ -445,6 +456,26 @@ def _stored_links(index):
     return links
 
 
+def _comm_links(index):
+    """The comms patch's stored Connection rows, as confirmed links. A row
+    whose end is gone is skipped."""
+    links = []
+    for pk, source, target, transport, cable_type in index.comm_links:
+        if source is None or target is None:
+            continue
+        networks = ()
+        if transport == 'dante':
+            a, b = (index.nodes[p.node].extra.get('dante_network', '') for p in (source, target))
+            if a and b and a.casefold() != b.casefold():
+                networks = (a, b)
+        cable = None if transport == 'dante' else {'recorded': bool(cable_type),
+                                                   **({'type': cable_type} if cable_type else {})}
+        links.append(Link(source.node, target.node, source, target, transport,
+                          network=transport == 'dante', source=('connection', pk),
+                          cable=cable, comm=True, networks=networks))
+    return links
+
+
 # -- JSON ----------------------------------------------------------------------
 
 def _node_json(node):
@@ -606,6 +637,7 @@ def project_graph(project, index=None, matches=None):
     g = _Graph(index)
     g.foreign_keys()
     g.links += _stored_links(index)
+    g.links += _comm_links(index)
     g.rule_a(matches.a)
     g.rule_b(matches.b)
     g.rule_c(matches.c)
@@ -654,6 +686,11 @@ def project_graph(project, index=None, matches=None):
         }
         if slot:
             edge['to_slot'] = slot
+        if any(l.comm for l in links):
+            edge['comm'] = True
+            cables = sorted({l.cable['type'] for l in links if l.cable and l.cable.get('type')})
+            if cables:
+                edge['cable_types'] = cables
         if b:
             # Its own line, lighter than A's (layout._classes: 'b').
             edge['b'] = True
@@ -674,6 +711,9 @@ def project_graph(project, index=None, matches=None):
             edge['text'] = texts[0] if len(texts) == 1 else texts
         edges.append(edge)
 
+        mismatched = sorted({l.networks for l in links if l.networks})
+        for networks in mismatched:
+            warnings.append({'kind': 'dante_network', 'edge': edge_id, 'networks': list(networks)})
         for link in links:
             if link.ambiguous or link.drift:
                 warnings.append({

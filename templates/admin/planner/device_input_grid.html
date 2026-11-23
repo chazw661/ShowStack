@@ -61,6 +61,9 @@
     text-align: left;
     color: #f5a524;
   }
+  /* Read-only: a comms link this port is in, edited on the comm device's page. */
+  .ss-comm-note { margin-top: 3px; font-size: 11px; line-height: 1.25; text-align: left; }
+  .ss-comm-note a { color: #8ec5ff; }
 </style>
 
 <div class="js-inline-admin-formset inline-group">
@@ -110,6 +113,7 @@
 
                   {{ form.signal_name }}
                   {% if form.link_note %}<div class="ss-link-note">{{ form.link_note }}</div>{% endif %}
+                  {% for note in form.comm_notes %}<div class="ss-comm-note">{% if note.device_id %}<a href="{% url 'admin:planner_device_change' note.device_id %}#comm-patch">{{ note.text }}</a>{% else %}{{ note.text }}{% endif %}</div>{% endfor %}
                   {% if form.b_ref %}
                     <div class="ss-b-row">
                       <label for="{{ form.b_ref.id_for_label }}">B</label>{{ form.b_ref }}

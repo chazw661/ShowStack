@@ -1651,3 +1651,60 @@ class ConsoleCsvUploadForm(forms.Form):
             if f.size > 5 * 1024 * 1024:
                 raise forms.ValidationError('File too large. Maximum size is 5 MB.')
         return f
+
+
+# ─── Comm devices ──────────────────────────────────────────────────────────────
+
+class DatalistTextInput(forms.TextInput):
+    """A text box offering ``options`` (a datalist): pick one or type."""
+
+    def __init__(self, options=(), attrs=None):
+        super().__init__(attrs)
+        self.options = list(options)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        from django.utils.html import format_html, format_html_join
+        list_id = f"{(attrs or {}).get('id', name)}-options"
+        attrs = {**(attrs or {}), 'list': list_id, 'autocomplete': 'off'}
+        return format_html('{}<datalist id="{}">{}</datalist>',
+                           super().render(name, value, attrs, renderer), list_id,
+                           format_html_join('', '<option value="{}"></option>',
+                                            ((o,) for o in self.options)))
+
+
+class CommDeviceForm(forms.ModelForm):
+    """A comm device (an intercom main station): its counts, network and IPs.
+
+    On its own page the same POST carries the Comms patch grids; ``clean``
+    checks them (``comm_patch.build``) and keeps the checked page as
+    ``comm_page`` for the admin to save and the template to redraw. A count
+    is not lowered past a patched port."""
+    MAX_PORTS = 128
+    COUNTS = ('input_count', 'output_count', 'four_wire_count', 'two_wire_count')
+
+    class Meta:
+        model = Device
+        fields = ['name', 'location', 'input_count', 'output_count', 'four_wire_count',
+                  'two_wire_count', 'dante_network', 'primary_ip_address',
+                  'secondary_ip_address']
+        labels = {'input_count': 'Dante inputs', 'output_count': 'Dante outputs'}
+
+    def clean(self):
+        cleaned = super().clean()
+        for name in self.COUNTS:
+            if (cleaned.get(name) or 0) > self.MAX_PORTS:
+                self.add_error(name, f'{self.MAX_PORTS} at most.')
+        if not self.instance.pk or not self.instance.is_comm:
+            return cleaned
+        from planner.connections import comm_patch
+        counts = {name: cleaned[name] for name in self.COUNTS if cleaned.get(name) is not None}
+        if comm_patch.PRESENT in self.data:
+            self.comm_page = comm_patch.build(self.instance, self.data, counts)
+            if self.comm_page.errors:
+                raise forms.ValidationError('Comms patch not saved: fix the rows marked below.')
+        else:
+            patched = comm_patch.unbuilt_ports_patched(self.instance, counts)
+            if patched:
+                raise forms.ValidationError(
+                    f"{', '.join(patched)} patched: clear before lowering the count.")
+        return cleaned

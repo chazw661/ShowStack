@@ -247,7 +247,7 @@
         </div>
         <div class="status-item">
             <span class="status-indicator {% if status_checks.has_devices %}active{% else %}inactive{% endif %}"></span>
-            <span class="status-label">I/O Devices</span>
+            <span class="status-label">Devices</span>
         </div>
         <div class="status-item">
             <span class="status-indicator {% if status_checks.has_amps %}active{% else %}inactive{% endif %}"></span>
@@ -273,7 +273,7 @@
     
     <a href="/admin/planner/device/" class="quick-action">
         <div class="quick-action-icon">🔌</div>
-        I/O Devices
+        Devices
     </a>
     
     <a href="/admin/planner/p1processor/" class="quick-action">
@@ -326,7 +326,7 @@
         <div class="stat-card">
             <div class="stat-card-header">
                 <span class="stat-icon">📦</span>
-                <span class="stat-title">I/O Devices</span>
+                <span class="stat-title">Devices</span>
             </div>
             <div class="stat-value">{{ device_stats.total }}</div>
             <div class="stat-details">

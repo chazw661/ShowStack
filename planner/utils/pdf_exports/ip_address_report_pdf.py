@@ -61,7 +61,7 @@ def generate_ip_address_report_pdf(project=None):
     # ------------------------------------------------------------------
     devices = (Device.objects.filter(project=project).order_by('name')
                if project else Device.objects.none())
-    story.append(kit.section_banner("I/O Devices", number=2, pagesize=PAGE, S=S))
+    story.append(kit.section_banner("Devices", number=2, pagesize=PAGE, S=S))
     story.append(Spacer(1, 8))
     if devices.exists():
         headers = ['Device Name', 'Primary IP Address', 'Secondary IP Address']
@@ -180,7 +180,7 @@ def generate_ip_address_report_pdf(project=None):
     summary_headers = ['Module', 'IP Addresses Assigned']
     summary_data = [
         ['Mixing Consoles', str(console_ips)],
-        ['I/O Devices', str(device_ips)],
+        ['Devices', str(device_ips)],
         ['Amplifiers', str(amp_ips)],
         ['System Processors', str(processor_ips)],
         ['COMM Belt Packs (Hardwired)', str(bp_ips)],

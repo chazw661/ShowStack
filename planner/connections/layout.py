@@ -343,11 +343,14 @@ class _Builder:
     def device_box(self, node, side):
         # The column title says inputs or outputs.
         name = node['label']
+        sub = _where(node)
+        if node.get('device_kind') == 'comm':
+            sub = ' · '.join(x for x in ('Comm device', sub) if x)
         if side == 'in':
             return self.box(f"{node['id']}#in", label=name, column=IO_IN,
-                            kind='device', sub=_where(node), node=node['id'])
+                            kind='device', sub=sub, node=node['id'])
         return self.box(f"{node['id']}#out", label=name, column=IO_OUT,
-                        kind='device', sub=_where(node), node=node['id'])
+                        kind='device', sub=sub, node=node['id'])
 
     def node_box(self, node_id, edge=None, end=None):
         node = self.nodes[node_id]
@@ -399,6 +402,8 @@ class _Builder:
             elif node['kind'] != 'unlinked':
                 self.node_box(node['id'])
         for edge in self.graph['edges']:
+            if edge.get('comm'):        # a comms patch link: listed, never drawn here
+                continue
             src = self.node_box(edge['from'], edge, 'from')
             dst = self.node_box(edge['to'], edge, 'to')
             if src.column >= dst.column:

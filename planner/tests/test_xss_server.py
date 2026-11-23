@@ -160,3 +160,58 @@ class ConsoleChannelNameTests(ChannelFixture, TestCase):
         self.assertNotIn(NAME, html)
         self.assertIn(f'Ch 1 · {self.ESCAPED}', html)
         self.assertIn(f'Aux 3 · {self.ESCAPED}', html)
+
+
+from planner.tests.test_comm_devices import CommFixture   # noqa: E402
+from planner.models import Device, DeviceOutput   # noqa: E402
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class CommDeviceNameTests(CommFixture, TestCase):
+    """The comm device page prints other devices' names, port names and
+    Dante networks in its lists, boxes, warnings and a JSON block; the other
+    device's page and the Wiring Diagram print the comm device's."""
+
+    SCRIPT = '</script><script>alert(1)</script>'
+
+    def assert_clean(self, html):
+        self.assertNotIn(NAME, html)
+        self.assertNotIn(self.SCRIPT, html)
+        self.assertNotIn('<script>alert(1)', html)
+
+    def test_names_networks_and_destinations_are_text_everywhere(self):
+        Device.objects.filter(pk=self.mk88.pk).update(name=NAME)
+        Device.objects.filter(pk=self.rio.pk).update(dante_network=self.SCRIPT[:40])
+        DeviceOutput.objects.filter(pk=self.out(self.rio, 2).pk).update(signal_name=NAME)
+        entry = f'{NAME} · Rio SL Out 2 [{self.SCRIPT[:40]}]'
+        r = self.post(dout1=f'{NAME} Out 3', dout2=entry, din1=f'{NAME} In 1',
+                      **{'4w1_send': f'{NAME} In 2', '2w1_dest': NAME, '2w1_cable': NAME[:40]})
+        self.assertEqual(r.status_code, 302)
+        Device.objects.filter(pk=self.arc.pk).update(name=NAME + ' comm')
+
+        page = self.client.get(self.url()).content.decode()
+        self.assert_clean(page)
+        escaped = '&lt;img src=x onerror=alert(1)&gt;'
+        self.assertIn(f'value="{escaped} Out 3"', page)             # a row's box
+        self.assertIn(f'<option value="{escaped} Out 4"></option>', page)   # a list
+        self.assertIn(f'value="{escaped}" aria-label="2W 1 destination"', page)
+        self.assertIn('\\u003C/script\\u003E', page)                # the JSON block
+        self.assertIn('class="comm-warning">Rio SL is on Dante network', page)
+
+        self.assert_clean(self.client.get(self.url(self.mk88)).content.decode())
+        self.assert_clean(self.client.get(self.url(self.rio)).content.decode())
+        note = self.client.get(self.url(self.mk88)).content.decode()
+        self.assertIn(f'← {escaped} comm Dante Out 1</a>', note)
+        for view in ('', '?view=dante', '?view=analog'):
+            wiring = self.client.get(reverse('planner:wiring_diagram') + view).content.decode()
+            self.assert_clean(wiring)
+        overview = self.client.get(reverse('planner:wiring_diagram')).content.decode()
+        self.assertIn(f'<td>{escaped} comm · Dante Out 1</td><td>{escaped} · Out 3</td>', overview)
+
+    def test_an_error_row_prints_what_was_typed_as_text(self):
+        r = self.post(dout1=NAME, dout2='MK88 Out 1', dout3='MK88 Out 1')
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assert_clean(html)
+        self.assertIn('value="&lt;img src=x onerror=alert(1)&gt;"', html)
+        self.assertIn('MK88 Out 1 is already picked on Dante Out 2.', html)
