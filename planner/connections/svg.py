@@ -13,6 +13,8 @@ from html import escape
 from planner.connections.layout import (BOX_W, COLUMN_HINTS, GROUP_HEAD, HINT_Y, KEY_PAD, LABEL_LH,
                                         LINE_H, MARGIN, SLOT_LH, TITLE_Y)
 
+COMMS_HREF = '?view=comms'     # where a box's comms note links to
+
 STYLE = """
 .wd-bg { fill: #ffffff; }
 .wd-col { font: 600 12px system-ui, -apple-system, sans-serif; fill: #555; letter-spacing: .04em; text-transform: uppercase; }
@@ -24,6 +26,7 @@ STYLE = """
 .wd-box.unlinked rect { fill: #fff8e6; stroke: #b7791f; stroke-dasharray: 5 3; }
 .wd-box .t { font: 600 12px system-ui, -apple-system, sans-serif; fill: #111; }
 .wd-box .s { font: 11px system-ui, -apple-system, sans-serif; fill: #555; }
+.wd-box .note { fill: #1a5fb4; text-decoration: underline; }
 .wd-box .p { font: 10px system-ui, -apple-system, sans-serif; fill: #2b4c7e; }
 .wd-edge { fill: none; stroke: #2b4c7e; stroke-width: 1.4; }
 .wd-edge.inferred { stroke-dasharray: 6 4; }
@@ -81,10 +84,21 @@ def _box(box):
         f'<g class="wd-box {_e(box.style)}" data-node="{_e(box.node)}" data-box="{_e(box.id)}">'
         f'<title>{_e(box.label)}</title>'
         f'<rect x="{_n(box.x)}" y="{_n(box.y)}" width="{_n(box.w)}" height="{_n(box.h)}" rx="4"/>'
-        + ''.join(f'<text class="{cls}" x="{_n(x)}" y="{_n(box.y + dy)}">{_e(line)}</text>'
-                  for cls, line, dy in box.text_rows) +
+        + _text_rows(box, x) +
         f'{_slots(box)}'
         '</g>')
+
+
+def _text_rows(box, x):
+    """A box's title, subtitle and extra lines. Its note ("N comms patches ·
+    see Comms tab"), however many lines, is one link to the Comms tab."""
+    plain, note = [], []
+    for cls, line, dy in box.text_rows:
+        text = f'<text class="{cls}" x="{_n(x)}" y="{_n(box.y + dy)}">{_e(line)}</text>'
+        (note if 'note' in cls.split() else plain).append(text)
+    if note:
+        plain.append(f'<a class="wd-note" href="{_e(COMMS_HREF)}">{"".join(note)}</a>')
+    return ''.join(plain)
 
 
 def _route(route):

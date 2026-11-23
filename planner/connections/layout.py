@@ -133,6 +133,7 @@ class Box:
     kind: str
     sub: str = ''
     lines: list = field(default_factory=list)   # extra text lines (the graph node's ``lines``)
+    note: str = ''              # a last text line that links to the Comms tab (``comms_note``)
     style: str = 'device'       # 'device' / 'unlinked' / 'location' / 'dummy'
     node: str = ''              # graph node id ('' for a dummy)
     group: str | None = None
@@ -174,7 +175,22 @@ class Box:
             for line in wrap(extra, TEXT_W):
                 rows.append(('s ln', line, y))
                 y += LINE_H
+        for line in self.note_lines:
+            rows.append(('s ln note', line, y))
+            y += LINE_H
         return rows
+
+    @cached_property
+    def note_lines(self):
+        """The note's lines: whole when it fits, else broken after its " · "
+        ("2 comms patches ·" / "see Comms tab") before any other space."""
+        if not self.note:
+            return []
+        if len(wrap(self.note, TEXT_W)) == 1:
+            return [self.note]
+        parts = self.note.split(' · ')
+        return [line for i, part in enumerate(parts)
+                for line in wrap(part + (' ·' if i < len(parts) - 1 else ''), TEXT_W)]
 
     @cached_property
     def head(self):
@@ -363,6 +379,7 @@ class _Builder:
         if box_id not in self.boxes:
             box = Box(box_id, **kw)
             box.lines = list(self.nodes.get(box.node, {}).get('lines', ()))
+            box.note = self.nodes.get(box.node, {}).get('comms_note', '')
             self.boxes[box_id] = box
             self.columns[box.column].append(box)
         return self.boxes[box_id]

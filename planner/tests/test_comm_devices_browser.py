@@ -230,4 +230,28 @@ class CommDeviceBrowserTests(CommFixture, StaticLiveServerTestCase):
             self.assertTrue(box.first.is_visible(), name)
         self.assertEqual(page.locator('svg.wd-svg .wd-link').count(), 0)
         self.assertEqual(page.locator('p.wd-banner').count(), 0)
+        # Each comms-only box says how many patches it has, inside the box,
+        # and the line goes to the Comms tab.
+        notes = page.locator('svg.wd-svg a.wd-note')
+        said = dict(zip(page.locator('svg.wd-svg .wd-box:has(a.wd-note) > title').all_text_contents(),
+                        [' '.join(t.all_text_contents()) for t in
+                         (n.locator('text') for n in notes.all())]))
+        self.assertEqual(said, {'Arcadia': '6 comms patches · see Comms tab',
+                                'MK88': '2 comms patches · see Comms tab',
+                                'DVS FOH': '1 comms patch · see Comms tab',
+                                'Rio SL': '2 comms patches · see Comms tab'})
+        outside = page.evaluate("""() => [...document.querySelectorAll('svg.wd-svg .wd-box')].flatMap(g => {
+            const box = g.querySelector('rect').getBoundingClientRect();
+            return [...g.querySelectorAll('a.wd-note text')].filter(t => {
+                const r = t.getBoundingClientRect();
+                return r.left < box.left - 1 || r.right > box.right + 1
+                    || r.top < box.top - 1 || r.bottom > box.bottom + 1;
+            }).map(t => t.textContent);
+        })""")
+        self.assertEqual(outside, [])
+        self.assertEqual(self.errors, [])
+        notes.first.click()
+        page.wait_for_load_state('networkidle')
+        self.assertTrue(page.url.endswith('?view=comms'), page.url)
+        self.assertEqual(page.locator('.wd-tabs a[aria-current="page"]').inner_text(), 'Comms')
         self.assertEqual(self.errors, [])

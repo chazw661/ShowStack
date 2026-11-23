@@ -8,6 +8,7 @@ tabs) is test_comm_devices.py.
 """
 import io
 import json
+import re
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -424,3 +425,93 @@ class DanteNetworkHeaderTests(CommsShow, TestCase):
         page = self.client.get(reverse('planner:wiring_diagram') + '?view=dante').content.decode()
         self.assertNotIn(NAME, page)
         self.assertIn(ESCAPED, page)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class CommsNoteTests(CommsShow, TestCase):
+    """A device whose only links are comms links says so on the Overview and
+    the Dante tab, where none of its lines are drawn."""
+    wiring = reverse('planner:wiring_diagram')
+    LINK = '<a class="wd-note" href="?view=comms">'
+
+    def notes(self, tab):
+        full = project_graph(self.project)
+        view = T.comms_notes(T.graph_view(full, tab), full)
+        return {n['label']: n['comms_note'] for n in view['nodes'] if 'comms_note' in n}
+
+    def test_each_comms_only_device_counts_its_own_patches(self):
+        expected = {
+            'Arcadia': '8 comms patches · see Comms tab',       # 7 links and a 2-wire
+            'Arcadia B': '1 comms patch · see Comms tab',
+            'MK88': '2 comms patches · see Comms tab',
+            'DVS FOH': '2 comms patches · see Comms tab',
+        }
+        for tab in (T.OVERVIEW, T.DANTE):
+            self.assertEqual(self.notes(tab), expected, tab)      # not the Rio: console links
+
+    def test_a_device_with_no_patch_or_another_link_has_no_note(self):
+        make_comm(self.project, 'Spare station')
+        make_device(self.project, 'Idle box', network='Main 96k')
+        notes = self.notes(T.DANTE)
+        for name in ('Spare station', 'Idle box', 'Rio SL', 'FOH'):
+            self.assertNotIn(name, notes)
+        # one console link and the MK88 is no longer comms only
+        ch = ConsoleInput.objects.get(console=self.foh, input_ch='5')
+        DeviceInput.objects.filter(pk=self.inp(self.mk88, 1).pk).update(console_input=ch)
+        self.assertNotIn('MK88', self.notes(T.OVERVIEW))
+        self.assertNotIn('MK88', self.notes(T.DANTE))
+
+    def test_the_project_graph_is_untouched(self):
+        full = project_graph(self.project)
+        before = digest(full)
+        T.comms_notes(full, full)
+        self.assertEqual(digest(full), before)
+        self.assertNotIn('comms_note', json.dumps(full['nodes']))
+
+    def test_the_note_is_a_line_in_the_box_linking_to_the_comms_tab(self):
+        for tab, boxes in (('overview', 6), ('dante', 4)):      # Overview: an I/O device's in and out box
+            r = self.client.get(f'{self.wiring}?view={tab}')
+            drawing = svg_of(r)
+            self.assertEqual(drawing.count(self.LINK), boxes, tab)
+            self.assertIn(f'{self.LINK}<text class="s ln note"', drawing)
+            # two lines, broken after the dot, in one link
+            for count in ('8 comms patches ·', '1 comms patch ·', '2 comms patches ·'):
+                self.assertRegex(drawing, re.escape(self.LINK) + r'<text class="s ln note"[^>]*>'
+                                 + re.escape(count) + r'</text><text class="s ln note"[^>]*>'
+                                 r'see Comms tab</text></a>', (tab, count))
+        for tab in ('analog', 'speakers', 'comms'):
+            page = self.client.get(f'{self.wiring}?view={tab}').content.decode()
+            self.assertNotIn('class="wd-note"', page, tab)
+            self.assertNotIn('see Comms tab', page, tab)
+
+    def test_the_note_is_inside_its_box(self):
+        full = project_graph(self.project)
+        view = T.comms_notes(T.graph_view(full, T.DANTE), full)
+        lay = L.layout(view, **T.layout_options(T.DANTE))
+        noted = [b for b in lay.boxes if b.note]
+        self.assertEqual(sorted(b.label for b in noted), ['Arcadia', 'Arcadia B', 'DVS FOH', 'MK88'])
+        for b in noted:
+            first, last = b.text_rows[-2:]
+            self.assertEqual((first[0], last[0]), ('s ln note', 's ln note'))
+            self.assertEqual(f'{first[1]} {last[1]}', b.note)
+            self.assertEqual(last[1], 'see Comms tab')
+            self.assertEqual(last[2] - first[2], L.LINE_H)
+            self.assertLess(last[2], b.h)
+            self.assertEqual(b.text_rows[-3][1], 'No IP')         # under the IP line
+            for _, line, _ in b.text_rows:
+                self.assertLessEqual(len(line) * L.CHAR_W, L.TEXT_W)
+        self.assertTrue(all(not b.note for b in lay.boxes if b.label == 'Rio SL'))
+
+    def test_the_pdf_has_the_same_text(self):
+        from pypdf import PdfReader
+        for tab in ('overview', 'dante'):
+            r = self.client.get(reverse('planner:wiring_diagram_pdf'), {'tabs': tab})
+            self.assertEqual(r.status_code, 200)
+            text = ' '.join('\n'.join(
+                p.extract_text() for p in PdfReader(io.BytesIO(r.content)).pages).split())
+            for note in ('8 comms patches · see Comms tab', '1 comms patch · see Comms tab',
+                         '2 comms patches · see Comms tab'):
+                self.assertIn(note, text, (tab, note))
+        r = self.client.get(reverse('planner:wiring_diagram_pdf'), {'tabs': 'analog'})
+        text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(r.content)).pages)
+        self.assertNotIn('see Comms tab', text)
