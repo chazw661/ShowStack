@@ -589,9 +589,9 @@ class WiringTests(CommFixture, TestCase):
         page = self.client.get(reverse('planner:wiring_diagram')).content.decode()
         self.assertIn('Connections (4)', page)
         self.assertIn('<td>Arcadia · Dante Out 2–3</td><td>MK88 · Out 3–4</td>'
-                      '<td>Dante (network) (comms patch)</td>', page)
+                      '<td>Dante (network) · see the Comms tab</td>', page)
         self.assertIn('<td>Arcadia · 4W 1</td><td>Rio SL · In 3</td>'
-                      '<td>Analogue · 4W adapter (comms patch)</td>', page)
+                      '<td>Analogue · 4W adapter · see the Comms tab</td>', page)
         self.assertNotIn('Not drawn', page)
 
     def test_each_tab_lists_its_own_transport_and_dante_shows_the_comm_device(self):
@@ -600,13 +600,18 @@ class WiringTests(CommFixture, TestCase):
         dante, analog = graph_view(full, DANTE), graph_view(full, ANALOG)
         self.assertEqual([e['transports'] for e in dante['edges']], [['dante']])
         self.assertEqual([e['transports'] for e in analog['edges']], [['analog']])
-        self.assertEqual([n['label'] for n in dante['nodes']], ['Arcadia'])
+        # every device on Dante is boxed: the comm device and each device
+        # with a Dante network set, console link or not
+        self.assertEqual([n['label'] for n in dante['nodes']],
+                         ['Arcadia', 'DVS FOH', 'MK88', 'Rio SL'])
         self.assertEqual(analog['nodes'], [])
-        page = self.client.get(reverse('planner:wiring_diagram') + '?view=dante').content.decode()
+        response = self.client.get(reverse('planner:wiring_diagram') + '?view=dante')
+        page = response.content.decode()
         self.assertIn('Connections (1)', page)
         self.assertNotIn('No console or Dante I/O device yet', page)
-        # a comm device has no Console connection to set
-        self.assertNotIn(f'{self.url()}"', page.split('wd-banner')[-1] if 'wd-banner' in page else '')
+        # no device here has a console link, so none has a Console connection to set
+        self.assertEqual(response.context['unset'], [])
+        self.assertNotIn('no Console connection set', page)
         pdf = self.client.get(reverse('planner:wiring_diagram_pdf'))
         self.assertEqual(pdf.status_code, 200)
 

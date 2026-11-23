@@ -182,3 +182,52 @@ class CommDeviceBrowserTests(CommFixture, StaticLiveServerTestCase):
         page = self.open(self.url())
         self.assertEqual(self.box(page, 'Dante Out 1').input_value(), f'{NAME} Out 1')
         self.assertEqual(self.box(page, '2W 1 destination').input_value(), NAME)
+
+    def test_the_comms_tab_draws_the_patch_left_to_right(self):
+        Device.objects.filter(pk=self.rio.pk).update(console_connection='dante')
+        self.post(din1='MK88 In 3', dout1='MK88 Out 3', dout2='DVS FOH Out 1',
+                  **{'4w1_send': 'Rio SL In 3', '4w1_recv': 'Rio SL Out 5',
+                     '2w1_dest': 'Wired BP chain SL', '2w1_cable': 'XLR3'})
+        page = self.open(reverse('planner:wiring_diagram') + '?view=comms')
+        self.shot(page, 'comms_tab')
+        self.assertEqual(page.locator('.wd-tabs a[aria-current="page"]').inner_text(), 'Comms')
+        self.assertEqual(page.locator('svg.wd-svg text.wd-col').all_text_contents(),
+                         ['To comms', 'Comm devices', 'From comms'])
+        self.assertEqual(page.locator('svg.wd-svg .wd-link').count(), 6)
+        # Every row's text stays inside its own box, and the 4W row has a
+        # line on each side at one height.
+        outside = page.evaluate("""() => [...document.querySelectorAll('svg.wd-svg .wd-box')].flatMap(g => {
+            const box = g.querySelector('rect').getBoundingClientRect();
+            return [...g.querySelectorAll('text')].filter(t => {
+                if (!t.textContent.trim()) return false;        // a blank second line
+                const r = t.getBoundingClientRect();
+                return r.left < box.left - 1 || r.right > box.right + 1
+                    || r.top < box.top - 1 || r.bottom > box.bottom + 1;
+            }).map(t => [t.textContent, t.getBoundingClientRect().toJSON(), box.toJSON()]);
+        })""")
+        self.assertEqual(outside, [])
+        ends = page.evaluate("""() => [...document.querySelectorAll('svg.wd-svg .wd-link')].map(g => {
+            const d = g.querySelector('path.wd-edge').getAttribute('d').match(/-?[\\d.]+/g).map(Number);
+            return [d[0], d[1], d[d.length - 2], d[d.length - 1]];
+        })""")
+        for x0, _, x1, _ in ends:
+            self.assertLess(x0, x1)
+        row = page.locator('svg.wd-svg text[data-slot="4W 1"]')
+        self.assertEqual(row.count(), 1)
+        self.assertEqual(self.errors, [])
+
+        Device.objects.filter(pk=self.rio.pk).update(dante_network='')
+        page = self.open(reverse('planner:wiring_diagram') + '?view=dante')
+        self.shot(page, 'dante_networks')
+        self.assertEqual(sorted(set(page.locator('svg.wd-svg text.wd-group').all_text_contents())),
+                         ['Comms 48k', 'No network set'])
+        # A device patched only to comms is boxed here once, with no line,
+        # and the banner does not ask for its Console connection.
+        for name in ('MK88', 'DVS FOH'):
+            box = page.locator('svg.wd-svg .wd-box').filter(
+                has=page.locator('text', has_text=name))
+            self.assertEqual(box.count(), 1, name)
+            self.assertTrue(box.first.is_visible(), name)
+        self.assertEqual(page.locator('svg.wd-svg .wd-link').count(), 0)
+        self.assertEqual(page.locator('p.wd-banner').count(), 0)
+        self.assertEqual(self.errors, [])

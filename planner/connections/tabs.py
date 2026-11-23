@@ -6,27 +6,37 @@ lay out on its own. Each tab is laid out independently, so a later PDF can
 draw each as its own section.
 
   overview   everything
-  dante      every console, every I/O device whose Console connection is
-             Dante, and their console links. Boxes carry the IP Address
-             Manager's primary / secondary IP (``lines``).
+  dante      every console, every device on Dante (``on_dante``: its
+             Console connection is Dante, or it has a Dante network set, or
+             it is a comm device) and the Dante console links. Boxes carry
+             the IP Address Manager's primary / secondary IP (``lines``).
   analog     analog and AES feeds (I/O or console -> processor -> amp, I/O
              -> amp, their unlinked feeds and "?" matches) and every console
              link that is not Dante. A console link whose device has no
              Console connection set is kept and flagged ``connection_unset``.
   speakers   PA cable runs only: amps and racks -> speakers.
+  comms      the comms patch (``comms_tab.comms_view``): every comm device,
+             the devices patched to it and its 2-wire destinations, laid out
+             in the Comms tab's own three columns (``layout.COMMS_SCHEME``).
+
+On the Dante tab, once any device there has a Dante network set, device
+boxes sit under a header per network (``node['group']``), "No network set"
+last; consoles are not grouped.
 
 B input links (``edge['b']``) are console links like A's: they follow their
 device's Console connection onto Dante or Analogue/AES, so a device patched
 only on B is on its tab.
 
-Comms patch links (``edge['comm']``) are never drawn on these tabs: each tab
+Comms patch links (``edge['comm']``) are drawn on the Comms tab only: each other tab
 keeps the ones on its transport (Dante: dante; Analogue/AES: the 4-wire
 cables) for its Connections table and Warnings, and they bring no box with
-them. Every comm device is on the Dante tab, with its IPs.
+them. A device patched only to comms is still boxed on the Dante tab when it
+is on Dante (``on_dante``), under its network, with its IPs and no line.
 
-Only the nodes a drawn edge reaches are kept (Dante also keeps its devices with
-no link yet). An I/O device's ``ports`` are counted from the kept edges, so
-it gets only the inputs / outputs box the tab uses.
+Only the nodes a drawn edge reaches are kept (Dante also keeps every device
+on Dante, linked or not). An I/O device's ``ports`` are counted from the drawn edges, so
+it gets only the inputs / outputs box the tab uses; one with no drawn link
+is a single box, in the Device inputs column.
 
 ``without_network(graph)`` is the Overview with "Show network feeds" off:
 no AVB / Dante network edges. An amp or processor slot one fed stays on its
@@ -34,13 +44,15 @@ box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
 plugs in where.
 """
 
-OVERVIEW, DANTE, ANALOG, SPEAKERS = 'overview', 'dante', 'analog', 'speakers'
+OVERVIEW, DANTE, ANALOG, SPEAKERS, COMMS = 'overview', 'dante', 'analog', 'speakers', 'comms'
 TABS = (
     (OVERVIEW, 'Overview'),
     (DANTE, 'Dante'),
     (ANALOG, 'Analogue/AES'),
     (SPEAKERS, 'Speaker cables'),
+    (COMMS, 'Comms'),
 )
+NO_NETWORK = 'No network set'
 TAB_KEYS = tuple(key for key, _ in TABS)
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceInput.console_input_b',
                        'DeviceOutput.console_output')
@@ -56,9 +68,11 @@ def layout_options(tab):
     """``layout()`` keyword arguments for a tab: the Overview keeps its
     columns (Processors and Unlinked feeds hide when empty); a tab hides
     every column it does not use."""
-    from planner.connections.layout import ALL_COLUMNS
+    from planner.connections.layout import ALL_COLUMNS, COMMS_SCHEME
     if tab == OVERVIEW:
         return {}
+    if tab == COMMS:
+        return {'scheme': COMMS_SCHEME, 'hide_empty': ()}
     options = {'hide_empty': ALL_COLUMNS}
     if tab == SPEAKERS:
         options['label_max'] = SPEAKER_LABEL_MAX
@@ -78,11 +92,24 @@ def _device_end(edge, nodes):
     return {}
 
 
+def on_dante(node):
+    """A device the Dante tab boxes: its Console connection is Dante, or it
+    has a Dante network set, or it is a comm device."""
+    return node['kind'] == 'device' and (node.get('console_connection') == 'dante'
+                                         or bool(node.get('dante_network'))
+                                         or node.get('device_kind') == 'comm')
+
+
 def unset_devices(graph):
-    """I/O devices with no Console connection set, in the graph's order."""
+    """I/O devices with a console link (A or B) and no Console connection
+    set, in the graph's order. A device with no console link -- one used
+    only for comms, or not patched yet -- has nothing the setting would
+    place, so it is not listed."""
+    linked = {end for e in graph['edges'] if not e.get('comm') and is_console_link(e)
+              for end in (e['from'], e['to'])}
     return [n for n in graph['nodes']
             if n['kind'] == 'device' and not n.get('console_connection')
-            and n.get('device_kind') != 'comm']
+            and n.get('device_kind') != 'comm' and n['id'] in linked]
 
 
 def _keep_dante(edge, nodes):
@@ -163,10 +190,33 @@ def without_b(graph):
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
 
 
+def _network_groups(nodes):
+    """Each device node with the Dante network header it sits under, once
+    any of them has a network set."""
+    spelling = {}
+    for n in nodes:
+        name = n.get('dante_network') or ''
+        if n['kind'] == 'device' and name:
+            spelling.setdefault(name.casefold(), name)
+    if not spelling:
+        return nodes
+    out = []
+    for n in nodes:
+        if n['kind'] == 'device':
+            key = (n.get('dante_network') or '').casefold()
+            n = {**n, 'group': {'key': f'net:{key}', 'label': spelling.get(key, NO_NETWORK),
+                                'order': 0 if key else None}}
+        out.append(n)
+    return out
+
+
 def graph_view(graph, tab):
     tab = tab_or_default(tab)
     if tab == OVERVIEW:
         return graph
+    if tab == COMMS:
+        from planner.connections.comms_tab import comms_view
+        return comms_view(graph)
     nodes = {n['id']: n for n in graph['nodes']}
     keep = KEEP[tab]
     edges = []
@@ -181,21 +231,21 @@ def graph_view(graph, tab):
     drawn = [e for e in edges if not e.get('comm')]
     used = {end for e in drawn for end in (e['from'], e['to'])}
     if tab == DANTE:
-        used |= {nid for nid, n in nodes.items()
-                 if n['kind'] == 'console'
-                 or (n['kind'] == 'device' and (n.get('console_connection') == 'dante'
-                                                or n.get('device_kind') == 'comm'))}
+        used |= {nid for nid, n in nodes.items() if n['kind'] == 'console' or on_dante(n)}
     out_nodes = []
     for node in graph['nodes']:
         if node['id'] not in used:
             continue
         node = dict(node)
-        if node['kind'] == 'device' and any(node['id'] in (e['from'], e['to']) for e in drawn):
+        if node['kind'] == 'device':
+            # Counted from the drawn links: a device with none is one box.
             node['ports'] = _ports(edges, node['id'])
         if tab == DANTE and node['kind'] in ('console', 'device'):
             node['lines'] = [_ip_line(node)]
         out_nodes.append(node)
 
+    if tab == DANTE:
+        out_nodes = _network_groups(out_nodes)
     kept = {e['id'] for e in edges}
     return {**graph, 'nodes': out_nodes, 'edges': edges,
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}

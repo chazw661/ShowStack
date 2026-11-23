@@ -330,9 +330,15 @@ class WiringTabViewTests(TabShow, TestCase):
 
     def test_the_banner_counts_several_and_goes_when_all_are_set(self):
         other = self.device('Other Box')
+        self.device_input(other, 1, self.channel(self.desk, 9, 'Spare'))
         self.assertContains(self.get(T.ANALOG), '2 I/O devices have no Console connection set')
         Device.objects.filter(pk__in=[self.plain.pk, other.pk]).update(console_connection='analog')
         self.assertNotContains(self.get(T.ANALOG), 'no Console connection set')
+
+    def test_the_banner_leaves_out_a_device_with_no_console_link(self):
+        self.device('Unpatched Box')
+        for tab in (T.DANTE, T.ANALOG):
+            self.assertEqual([d['name'] for d in self.get(tab).context['unset']], ['Plain Box'])
 
     def test_the_analog_legend_shows_the_unset_style(self):
         self.assertContains(self.get(T.ANALOG), 'Console connection not set')

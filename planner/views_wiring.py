@@ -107,9 +107,12 @@ def _end(node, ports, slot=''):
     return ' · '.join(x for x in (node.get('label', ''), ports, slot) if x)
 
 
-def connection_rows(graph, lay):
-    """The Connections table: one row per label drawn as a key."""
+def connection_rows(graph, lay, full=None):
+    """The Connections table: one row per label drawn as a key. ``full``:
+    the whole project graph, for the name of a device a comms link reaches
+    that this tab does not draw."""
     nodes = {n['id']: n for n in graph['nodes']}
+    every = {n['id']: n for n in (full or graph)['nodes']}
     edges = {e['id']: e for e in graph['edges']}
     rows = []
     for key, edge_id in lay.keys:
@@ -133,15 +136,11 @@ def connection_rows(graph, lay):
         cable = ' · '.join([transport] + edge.get('cable_types', []))
         rows.append({
             'key': f'C{n}',
-            'from': _end(labels_of(graph, edge['from']), edge.get('from_ports', '')),
-            'to': _end(labels_of(graph, edge['to']), edge.get('to_ports', '')),
-            'cable': f'{cable} (comms patch)',
+            'from': _end(every.get(edge['from'], {}), edge.get('from_ports', '')),
+            'to': _end(every.get(edge['to'], {}), edge.get('to_ports', '')),
+            'cable': f'{cable} · see the Comms tab',
         })
     return rows
-
-
-def labels_of(graph, node_id):
-    return next((n for n in graph['nodes'] if n['id'] == node_id), {})
 
 
 TAB_EMPTY = {
@@ -149,12 +148,13 @@ TAB_EMPTY = {
              'I/O device page.',
     T.ANALOG: 'No analogue or AES feed and no non-Dante console link yet.',
     T.SPEAKERS: 'No PA cable runs yet. Add them on the PA Cable Schedule.',
+    T.COMMS: 'No comm device yet. Add one on the Devices page ("Add comm device").',
 }
 
 
 def unset_banner(graph, tab):
-    """The Dante and Analog tabs list the I/O devices with no Console
-    connection set, each linking to its device page."""
+    """The Dante and Analog tabs list the I/O devices that have a console
+    link and no Console connection set, each linking to its device page."""
     if tab not in (T.DANTE, T.ANALOG):
         return []
     return [{'name': n['label'],
@@ -182,7 +182,7 @@ def tab_view(project, full, tab, network=True):
         'tab_empty_text': TAB_EMPTY.get(tab, ''),
         'show_unset_legend': any(e.get('connection_unset') for e in edges),
         'show_b_legend': any(e.get('b') for e in edges),
-        'connections': connection_rows(graph, lay),
+        'connections': connection_rows(graph, lay, full),
         'warnings': warnings_for(graph, lay) + duplicate_warning_rows(project),
         'counts': {
             'boxes': len(lay.boxes),

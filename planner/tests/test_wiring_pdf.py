@@ -231,8 +231,9 @@ class WiringPdfTests(WiringShow, TestCase):
         reader, pages = self.pdf()
         stamp_digest = f'Graph {digest(project_graph(self.project))}'
         starts = [i for i, text in enumerate(pages) if text.startswith(self.project.name)]
-        self.assertEqual(len(starts), 4)
-        for i, label in zip(starts, ('Overview', 'Dante', 'Analogue/AES', 'Speaker cables')):
+        self.assertEqual(len(starts), 5)
+        for i, label in zip(starts, ('Overview', 'Dante', 'Analogue/AES', 'Speaker cables',
+                                     'Comms')):
             head = pages[i].split('\n')[1]
             self.assertTrue(head.startswith(label), head)
             self.assertIn('Printed ', head)
@@ -251,7 +252,7 @@ class WiringPdfTests(WiringShow, TestCase):
         self.assertEqual(len(heads), 1)
         self.assertTrue(heads[0].startswith('Analogue/AES'))
         _, pages = self.pdf(tabs='nonsense')                # nothing known: every tab
-        self.assertEqual(sum(t.startswith(self.project.name) for t in pages), 4)
+        self.assertEqual(sum(t.startswith(self.project.name) for t in pages), 5)
 
     def test_paper_sizes(self):
         for paper, size in (('11x17', (1224, 792)), ('24x36', (2592, 1728)), ('A4', (1224, 792))):
@@ -333,7 +334,7 @@ class WiringPdfTests(WiringShow, TestCase):
     def test_an_empty_project_still_prints_its_title_blocks(self):
         self.project = self.make_project('Empty show')
         _, pages = self.pdf()
-        self.assertEqual(sum(t.startswith('Empty show') for t in pages), 4)
+        self.assertEqual(sum(t.startswith('Empty show') for t in pages), 5)
         self.assertIn('Nothing to draw yet', pages[0])
 
     def test_any_project_role_can_download_and_only_their_project(self):
