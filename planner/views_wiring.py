@@ -166,6 +166,8 @@ def tab_view(project, full, tab, network=True):
     """One tab of the project's graph, laid out, with its tables: what the
     page and the PDF both draw."""
     graph = T.graph_view(full, tab)
+    if tab in (T.OVERVIEW, T.DANTE):
+        graph = T.comms_notes(graph, full)
     hidden_network = 0
     if tab == T.OVERVIEW and not network:
         hidden_network = sum(bool(e.get('network')) for e in graph['edges'])

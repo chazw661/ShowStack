@@ -38,6 +38,9 @@ on Dante, linked or not). An I/O device's ``ports`` are counted from the drawn e
 it gets only the inputs / outputs box the tab uses; one with no drawn link
 is a single box, in the Device inputs column.
 
+``comms_notes(graph, full)`` adds the Overview's and the Dante tab's
+"N comms patches · see Comms tab" line to a device with comms links only.
+
 ``without_network(graph)`` is the Overview with "Show network feeds" off:
 no AVB / Dante network edges. An amp or processor slot one fed stays on its
 box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
@@ -53,6 +56,7 @@ TABS = (
     (COMMS, 'Comms'),
 )
 NO_NETWORK = 'No network set'
+COMMS_NOTE = '{n} {patches} · see Comms tab'
 TAB_KEYS = tuple(key for key, _ in TABS)
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceInput.console_input_b',
                        'DeviceOutput.console_output')
@@ -188,6 +192,35 @@ def without_b(graph):
     kept = {e['id'] for e in edges}
     return {**graph, 'edges': edges,
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
+
+
+def comms_notes(graph, full):
+    """``graph`` with ``comms_note`` on each device whose only links are
+    comms links: "2 comms patches · see Comms tab". For the Overview and the
+    Dante tab, which box those devices and draw none of their lines.
+
+    Counted per device from ``full``: one for each comms link it is an end
+    of, and one for each 2-wire port with a destination. A device with any
+    other link (a console, an amp, a processor) gets no note."""
+    counts, others = {}, set()
+    for edge in full['edges']:
+        ends = (edge['from'], edge['to'])
+        if edge.get('comm'):
+            for end in ends:
+                counts[end] = counts.get(end, 0) + len(edge.get('links', ()))
+        else:
+            others.update(ends)
+    for node in full['nodes']:
+        if node.get('two_wire'):
+            counts[node['id']] = counts.get(node['id'], 0) + len(node['two_wire'])
+    nodes = []
+    for node in graph['nodes']:
+        n = counts.get(node['id'], 0)
+        if node['kind'] == 'device' and n and node['id'] not in others:
+            node = {**node, 'comms_note': COMMS_NOTE.format(
+                n=n, patches='comms patch' if n == 1 else 'comms patches')}
+        nodes.append(node)
+    return {**graph, 'nodes': nodes}
 
 
 def _network_groups(nodes):
