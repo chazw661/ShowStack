@@ -6,7 +6,8 @@ text, never pictures, so the file stays sharp at any size and its text can
 be searched and copied. Text is Noto Sans (embedded, subset: the label font,
 ``utils/labels/fonts``) because Helvetica has no glyph for many names; the
 arrows "←" / "→", which Noto lacks, are drawn in the built-in Symbol font
-in the same line.
+in the same line. A B input link is drawn as on screen: its line at 45%,
+its label at 80%, labelled "(B)", with its own legend entry.
 
 Each tab starts a page: a title block (project, tab, when it was printed,
 the graph's digest), the legend, then the diagram at one scale
@@ -51,17 +52,19 @@ LINE = colors.HexColor('#2b4c7e')
 
 # The screen's styles (connections/svg.py STYLE), in the same cascade order.
 EDGE_STYLES = (
-    ('', {'stroke': '#2b4c7e', 'width': 1.4, 'dash': None}),
+    ('', {'stroke': '#2b4c7e', 'width': 1.4, 'dash': None, 'alpha': 1}),
     ('inferred', {'dash': (6, 4)}),
     ('unlinked', {'stroke': '#b7791f', 'dash': (4, 3)}),
     ('network', {'stroke': '#2f855a', 'dash': (2, 3), 'width': 1.8}),
     ('unset', {'stroke': '#7a7a7a', 'dash': (1, 3), 'width': 1.8}),
+    ('b', {'alpha': 0.45}),             # a B input link: lighter, as on screen
 )
 LABEL_STYLES = (
-    ('', {'fill': '#222222', 'font': REGULAR}),
+    ('', {'fill': '#222222', 'font': REGULAR, 'alpha': 1}),
     ('unlinked', {'fill': '#8a5a12', 'font': SEMIBOLD}),
     ('network', {'fill': '#2f855a'}),
     ('unset', {'fill': '#6b6b6b'}),
+    ('b', {'alpha': 0.8}),
 )
 BOX_STYLES = {
     'device': ('#f4f7fb', '#4a6f9a', None),
@@ -75,6 +78,7 @@ LEGEND = (
     ('AVB / Dante network (no cable)', ('network',)),
 )
 UNSET_LEGEND = ('Console connection not set', ('unset',))
+B_LEGEND = ('B input (lighter; labelled “(B)”)', ('b',))
 
 
 def _cascade(styles, classes):
@@ -155,6 +159,7 @@ class _Window:
 def _stroke(c, style):
     c.setStrokeColor(colors.HexColor(style['stroke']))
     c.setLineWidth(style['width'])
+    c.setStrokeAlpha(style['alpha'])
     c.setDash(*([list(style['dash']), 0] if style['dash'] else [[], 0]))
 
 
@@ -166,6 +171,7 @@ def _draw_route(c, w, route):
         (p.moveTo if i == 0 else p.lineTo)(w.x(x), w.y(y))
     c.drawPath(p, stroke=1, fill=0)
     ex, ey = route.points[-1]
+    c.setStrokeAlpha(1)
     c.setDash([], 0)
     c.setFillColor(LINE)
     head = c.beginPath()
@@ -190,11 +196,13 @@ def _draw_label(c, w, tile, route):
         return
     style = _cascade(LABEL_STYLES, route.classes)
     n = len(route.lines)
+    c.setFillAlpha(style['alpha'])
     for i, line in enumerate(route.lines):
         y = route.label_y - (n - 1 - i) * L.LABEL_LH
         if tile.holds(route.label_x, y - 4):
             draw_text(c, w.x(route.label_x), w.y(y), line, style['font'], w.pt(11),
                       colors.HexColor(style['fill']))
+    c.setFillAlpha(1)
 
 
 def _draw_box(c, w, tile, box):
@@ -290,12 +298,13 @@ def tile_marks(plan, crossings, pages):
     return out
 
 
-def _legend(c, x, y, show_unset):
-    entries = list(LEGEND) + ([UNSET_LEGEND] if show_unset else [])
+def _legend(c, x, y, show_unset, show_b=False):
+    entries = list(LEGEND) + ([B_LEGEND] if show_b else []) + ([UNSET_LEGEND] if show_unset else [])
     for label, classes in entries:
         style = _cascade(EDGE_STYLES, classes)
         _stroke(c, style)
         c.line(x, y + 3, x + 24, y + 3)
+        c.setStrokeAlpha(1)
         c.setDash([], 0)
         draw_text(c, x + 30, y, label, REGULAR, 8, MUTED)
         x += 30 + text_width(label, REGULAR, 8) + 18
@@ -337,7 +346,7 @@ class DiagramPage(Flowable):
         draw_text(c, 0, top - 31, self.view['tab_label'], SEMIBOLD, 11.5, NAVY)
         draw_text(c, text_width(self.view['tab_label'], SEMIBOLD, 11.5) + 12, top - 31,
                   '  ·  '.join(parts), REGULAR, 9, MUTED)
-        _legend(c, 0, top - 48, self.view['show_unset_legend'])
+        _legend(c, 0, top - 48, self.view['show_unset_legend'], self.view.get('show_b_legend'))
         if self.plan.tiled:
             _locator(c, self.width, top, self.plan, self.tile)
 
@@ -470,10 +479,21 @@ EMPTY_PROJECT = ('Nothing to draw yet. Add consoles, I/O devices, processors, am
                  'runs and they appear here.')
 
 
+def diagram_area(pagesize):
+    """(width, height) in points a page of ``pagesize`` has for the diagram."""
+    return (pagesize[0] - 2 * MARGIN,
+            pagesize[1] - 2 * MARGIN - FOOTER_H - HEAD_H - HEAD_GAP - 1)
+
+
+def diagram_pages(lay, paper):
+    """How many pages ``lay``'s diagram takes on ``paper`` (the download
+    panel's hint): the tiles ``build_wiring_pdf`` would draw."""
+    return len(tiling.plan(lay, *diagram_area(PAPER.get(paper, PAPER['11x17']))).tiles)
+
+
 def plans_for(views, pagesize):
     """{tab: (plan, crossings)} for the diagram area of ``pagesize``."""
-    width = pagesize[0] - 2 * MARGIN
-    height = pagesize[1] - 2 * MARGIN - FOOTER_H - HEAD_H - HEAD_GAP - 1
+    width, height = diagram_area(pagesize)
     out = {}
     for view in views:
         lay = view['layout']

@@ -3,24 +3,34 @@
 Each B link is its own edge (``b: true``), lighter than A's, labelled the way
 an A console link is plus " (B)" and " · <Source (B)>" when set; on Overview,
 Dante and Analogue/AES by the device's Console connection, like A. A device
-patched only on B is on its tab. Download PDF leaves B out.
+patched only on B is on its tab. Download PDF and Download DXF draw them too.
 
     python manage.py test planner.tests.test_wiring_b_links \\
         --settings=audiopatch.test_settings
 """
+import io
+import warnings
 import xml.etree.ElementTree as ET
 from unittest import mock
+
+import ezdxf
 
 from django.test import TestCase
 from django.urls import reverse
 
+from planner.connections import dxf
 from planner.connections import layout as L
 from planner.connections import svg
 from planner.connections import tabs as T
 from planner.connections.graph import project_graph
 from planner.models import DeviceInput
 from planner.tests.connection_fixtures import ConnectionFixtures
+from planner.utils.pdf_exports import wiring_pdf
 from planner.views_wiring import connection_rows, tab_view
+
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore')
+    from PyPDF2 import PdfReader
 
 SVG_NS = '{http://www.w3.org/2000/svg}'
 
@@ -137,23 +147,76 @@ class BEdgeTests(BShow, TestCase):
         self.assertIn('Ch 1 (B)', rows[0]['to'])
         self.assertTrue(view['show_b_legend'])
 
-    def test_download_pdf_leaves_b_out(self):
+    def login(self):
         self.user.is_staff = True
         self.user.save()
         self.client.force_login(self.user)
         session = self.client.session
         session['current_project_id'] = self.project.pk
         session.save()
-        seen = {}
 
-        def fake(**kw):
+    def test_download_pdf_draws_b_lighter_and_labelled(self):
+        self.login()
+        seen = {}
+        real = wiring_pdf.build_wiring_pdf
+
+        def spy(**kw):
             seen.update(kw)
-            return b'%PDF-1.4'
-        with mock.patch('planner.utils.pdf_exports.wiring_pdf.build_wiring_pdf', fake):
-            r = self.client.get(reverse('planner:wiring_diagram_pdf'))
+            return real(**kw)
+        with mock.patch('planner.utils.pdf_exports.wiring_pdf.build_wiring_pdf', spy):
+            r = self.client.get(reverse('planner:wiring_diagram_pdf'), {'network': '1'})
         self.assertEqual(r.status_code, 200)
-        for view in seen['views']:
-            self.assertEqual(self.b_edges(view['graph']), [], view['tab'])
-        # The page itself still draws them, with the legend.
+        by_tab = {view['tab']: view for view in seen['views']}
+        for tab in (T.OVERVIEW, T.DANTE, T.ANALOG):
+            self.assertTrue(self.b_edges(by_tab[tab]['graph']), tab)
+            self.assertTrue(by_tab[tab]['show_b_legend'], tab)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            pages = [p.extract_text() or '' for p in PdfReader(io.BytesIO(r.content)).pages]
+        text = ' '.join(' '.join(pages).split())
+        self.assertIn('In 2 → Ch 1 (B) · Kick wireless', text)
+        self.assertIn('In 1–2 → Ch 2–3 (B)', text)
+        self.assertIn('B input (lighter; labelled “(B)”)', text)
+        # Lighter: the line at 45%, its label at 80%, as on screen.
+        line = wiring_pdf._cascade(wiring_pdf.EDGE_STYLES, ('confirmed', 'b'))
+        label = wiring_pdf._cascade(wiring_pdf.LABEL_STYLES, ('confirmed', 'b'))
+        self.assertEqual((line['alpha'], label['alpha']), (0.45, 0.8))
+        self.assertEqual(wiring_pdf._cascade(wiring_pdf.EDGE_STYLES, ('confirmed',))['alpha'], 1)
+        self.assertIn(b'/CA .45', r.content)          # the stroke opacity is in the file
+
+    def test_a_pdf_with_no_b_link_has_no_b_legend(self):
+        DeviceInput.objects.update(console_input_b=None)
+        self.login()
+        r = self.client.get(reverse('planner:wiring_diagram_pdf'))
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            text = ' '.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(r.content)).pages)
+        self.assertNotIn('B input', text)
+        self.assertNotIn('(B)', text)
+
+    def test_download_dxf_draws_b_on_its_status_layer_lighter_and_labelled(self):
+        self.login()
+        # The Dante B link is a network feed: still on its status layer.
+        for tab in (T.DANTE, T.ANALOG, T.OVERVIEW):
+            r = self.client.get(reverse('planner:wiring_diagram_dxf'), {'tabs': tab, 'network': '1'})
+            self.assertEqual(r.status_code, 200)
+            doc = ezdxf.read(io.StringIO(r.content.decode('utf-8')))
+            msp = doc.modelspace()
+            view = tab_view(self.project, self.graph(), tab)
+            b_routes = [route for route in view['layout'].routes if 'b' in route.classes]
+            self.assertTrue(b_routes, tab)
+            faded = [e for e in msp.query('LWPOLYLINE') if not e.closed and e.dxf.hasattr('true_color')]
+            self.assertEqual(len(faded), len(b_routes), tab)
+            for line in faded:
+                self.assertIn(line.dxf.layer, (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED), tab)
+                self.assertEqual(line.dxf.true_color, dxf._fade(0x2b4c7e))
+            texts = [e.plain_text() for e in msp.query('TEXT')]
+            self.assertTrue(any('(B)' in t for t in texts if '→' in t), tab)
+            self.assertIn(dxf.B_LEGEND[0], texts)
+        self.assertEqual(dxf.edge_layer(T.DANTE, ('confirmed', 'network', 'b'), {}), dxf.CONFIRMED)
+        self.assertEqual(dxf.edge_layer(T.DANTE, ('confirmed', 'network'), {}), dxf.NETWORK)
+
+    def test_the_page_still_draws_them_with_the_legend(self):
+        self.login()
         page = self.client.get(reverse('planner:wiring_diagram')).content.decode()
         self.assertIn('B input (lighter', page)

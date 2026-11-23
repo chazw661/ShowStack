@@ -514,10 +514,16 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, 'svg.wd-svg .wd-label.b', f'In 2 → Ch 1 (B) · {short}', 'B label')
         self.assertEqual(page.evaluate("document.querySelectorAll('svg.wd-svg b').length"), 0)
 
-    def test_the_download_pdf_panel_with_hostile_names(self):
-        # PR: wiring PDF. The panel sends the ticked tabs, network=0 when
-        # unticked, the paper and the browser's time zone; the PDF it gets
-        # back is built from hostile names without a dialog on the page.
+    def test_the_download_panel_with_hostile_names(self):
+        # PR: wiring PDF, then DXF. The panel sends the ticked tabs, the
+        # paper, the browser's time zone and network=1 only when its box is
+        # ticked (off by default); the PDF and the DXF it gets back are built
+        # from hostile names without a dialog on the page. Each tab shows its
+        # diagram pages, following the paper.
+        import io
+        import zipfile
+
+        import ezdxf
         from planner.models import Device, DeviceOutput
         self.project.name = QUOTED
         self.project.save()
@@ -526,21 +532,60 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         page = self.open(reverse('planner:wiring_diagram'))
         page.wait_for_selector('svg.wd-svg')
         page.click('#wd-pdf summary')
+        self.assertFalse(page.is_checked('input[name=network]'))
+        hint = 'input[name=tabs][value=overview] ~ .wd-pages'
+        self.assertEqual(page.inner_text(hint), '· 1 diagram page')
+        self.assertEqual(page.inner_text('input[name=tabs][value=comms] ~ .wd-pages'),
+                         '· nothing to draw')
+        self.assertEqual(page.inner_text('#wd-pdf-hint'), '')
+        # The hint is rewritten by the script from the tab's own numbers.
+        page.evaluate("""() => {
+            const s = document.querySelector('input[name=tabs][value=overview] ~ .wd-pages');
+            s.setAttribute('data-p-11x17-0', '7'); s.setAttribute('data-p-24x36-0', '2');
+            s.setAttribute('data-p-11x17-1', '9');
+        }""")
         page.uncheck('input[name=tabs][value=dante]')
+        self.assertEqual(page.inner_text(hint), '· 7 diagram pages')
+        self.assertEqual(page.inner_text('#wd-pdf-hint'),
+                         'Overview is 7 diagram pages at 11 × 17. Try 24 × 36.')
+        page.check('input[name=network]')
+        self.assertEqual(page.inner_text(hint), '· 9 diagram pages')
         page.uncheck('input[name=network]')
         page.check('input[name=paper][value="24x36"]')
+        self.assertEqual(page.inner_text(hint), '· 2 diagram pages')
+        self.assertEqual(page.inner_text('#wd-pdf-hint'), '')
         with page.expect_download() as info:
-            page.click('#wd-pdf-form button[type=submit]')
+            page.click('#wd-pdf-form button[type=submit]:not([formaction])')
         download = info.value
         query = download.url.split('?', 1)[1]
+        self.assertIn('/wiring-diagram/pdf/', download.url)
         self.assertIn('tabs=overview', query)
         self.assertNotIn('tabs=dante', query)
-        self.assertIn('network=0', query)
+        self.assertNotIn('network=', query)             # unticked: off
         self.assertIn('paper=24x36', query)
         self.assertRegex(query, r'tz=[A-Za-z_]+(%2F|/)?')
         self.assertTrue(download.suggested_filename.endswith('.pdf'))
         with open(download.path(), 'rb') as f:
             self.assertEqual(f.read(5), b'%PDF-')
+        # Download DXF: the same form, sent to the DXF URL; a zip of the ticked tabs.
+        page.check('input[name=network]')
+        with page.expect_download() as info:
+            page.click('#wd-pdf-form button[formaction]')
+        download = info.value
+        query = download.url.split('?', 1)[1]
+        self.assertIn('/wiring-diagram/dxf/', download.url)
+        self.assertIn('network=1', query)
+        self.assertNotIn('tabs=dante', query)
+        self.assertTrue(download.suggested_filename.endswith('.zip'))
+        with open(download.path(), 'rb') as f:
+            archive = zipfile.ZipFile(io.BytesIO(f.read()))
+        self.assertEqual(len(archive.namelist()), 4)
+        for name in archive.namelist():
+            self.assertNotIn('/', name)
+            doc = ezdxf.read(io.StringIO(archive.read(name).decode('utf-8')))
+            self.assertEqual(len(doc.audit().errors), 0)
+        texts = [e.plain_text() for e in doc.modelspace().query('TEXT')]
+        self.assertEqual(texts[0], QUOTED)              # the project's name, as text
         self.assertEqual([], self.dialogs)
         self.assertEqual(0, page.evaluate("document.querySelectorAll('img[src=\"x\"]').length"))
 

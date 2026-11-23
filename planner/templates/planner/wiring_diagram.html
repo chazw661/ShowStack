@@ -71,7 +71,12 @@
   .wd-pdf-panel fieldset { border: 0; margin: 0 0 8px; padding: 0; }
   .wd-pdf-panel legend { color: #aaa; font-size: 11px; font-weight: 600; padding: 0; margin-bottom: 4px;
                          text-transform: uppercase; letter-spacing: .04em; }
-  .wd-pdf-panel label { display: block; color: #eee; font-size: 13px; margin: 2px 0; }
+  .wd-pdf-panel label { display: block; color: #eee; font-size: 13px; margin: 2px 0; white-space: nowrap; }
+  .wd-pages { color: #aaa; font-size: 12px; }
+  .wd-pdf-hint { color: #f6c04f; font-size: 12px; margin: 0 0 8px; max-width: 300px; }
+  .wd-pdf-hint:empty { display: none; }
+  .wd-pdf-note { color: #aaa; font-size: 11px; margin: 8px 0 0; max-width: 300px; }
+  .wd-pdf-buttons { display: flex; gap: 8px; }
   @media print {
     #header, #nav-sidebar, #toggle-nav-sidebar, .breadcrumbs, #footer,
     .wd-tabs, .wd-bar { display: none !important; }
@@ -122,19 +127,24 @@
       <span class="wd-counts">{{ counts.boxes }} boxes · {{ counts.confirmed }} confirmed · {{ counts.inferred }} inferred · {{ counts.unlinked }} not linked</span>
       <span class="wd-digest" title="Names this exact wiring: a printout with the same graph number shows the same thing">Graph {{ digest }}</span>
       <details class="wd-pdf" id="wd-pdf">
-        <summary class="wd-toggle">Download PDF</summary>
-        <form class="wd-pdf-panel" method="get" action="{{ pdf_url }}" id="wd-pdf-form">
+        <summary class="wd-toggle">Download</summary>
+        <form class="wd-pdf-panel" method="get" action="{{ pdf_url }}" id="wd-pdf-form" data-many="{{ many_pages }}">
           <fieldset><legend>Tabs</legend>
-            {% for t in tabs %}<label><input type="checkbox" name="tabs" value="{{ t.key }}" checked> {{ t.label }}</label>{% endfor %}
+            {% for t in tabs %}<label><input type="checkbox" name="tabs" value="{{ t.key }}" data-label="{{ t.label }}" checked> {{ t.label }} <span class="wd-pages"{% for key, n in t.pages.counts %} data-p-{{ key }}="{{ n }}"{% endfor %}>· {{ t.pages.text }}</span></label>{% endfor %}
           </fieldset>
           <fieldset><legend>Overview</legend>
-            <label><input type="checkbox" name="network" value="1" checked> Network feeds</label>
+            <label><input type="checkbox" name="network" value="1"> Network feeds</label>
           </fieldset>
-          <fieldset><legend>Paper</legend>
+          <fieldset><legend>Paper (PDF only)</legend>
             {% for key, label in papers %}<label><input type="radio" name="paper" value="{{ key }}"{% if forloop.first %} checked{% endif %}> {{ label }}</label>{% endfor %}
           </fieldset>
+          <p class="wd-pdf-hint" id="wd-pdf-hint" role="status">{{ page_suggestion }}</p>
           <input type="hidden" name="tz" value="">
-          <button type="submit" class="wd-toggle">Download</button>
+          <div class="wd-pdf-buttons">
+            <button type="submit" class="wd-toggle">Download PDF</button>
+            <button type="submit" class="wd-toggle" formaction="{{ dxf_url }}">Download DXF</button>
+          </div>
+          <p class="wd-pdf-note">Pages are the PDF's diagram pages; its Connections table and Warnings follow. DXF (for Vectorworks) is one whole drawing per tab, zipped when more than one tab is ticked.</p>
         </form>
       </details>
     </div>
@@ -183,18 +193,34 @@
 {{ block.super }}
 <script>
 (function () {
-  // Download PDF: the panel's form carries the browser's time zone, and
-  // network=0 when its box is unticked (an unticked box sends nothing).
+  // Download: the panel's form carries the browser's time zone. Network
+  // feeds are off unless its box is ticked (an unticked box sends nothing).
   var form = document.getElementById('wd-pdf-form');
   if (form) {
+    // "· N diagram pages" beside each tab follows the paper and the Network
+    // feeds box; a ticked tab over the limit at 11 x 17 suggests 24 x 36.
+    var hint = document.getElementById('wd-pdf-hint');
+    var many = parseInt(form.getAttribute('data-many'), 10) || 4;
+    var pages = function () {
+      var paper = (form.querySelector('input[name=paper]:checked') || {}).value || '11x17';
+      var net = form.querySelector('input[name=network]');
+      var key = 'data-p-' + paper + '-' + (net && net.checked ? '1' : '0');
+      var over = [];
+      form.querySelectorAll('input[name=tabs]').forEach(function (box) {
+        var span = box.parentNode.querySelector('.wd-pages');
+        if (!span) return;
+        var n = parseInt(span.getAttribute(key), 10) || 0;
+        span.textContent = '· ' + (n ? n + ' diagram page' + (n === 1 ? '' : 's') : 'nothing to draw');
+        if (box.checked && paper === '11x17' && n > many) {
+          over.push(box.getAttribute('data-label') + ' is ' + n + ' diagram pages at 11 × 17. Try 24 × 36.');
+        }
+      });
+      if (hint) hint.textContent = over.join(' ');
+    };
+    form.addEventListener('change', pages);
+    pages();
     form.addEventListener('submit', function () {
       try { form.elements.tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
-      var net = form.querySelector('input[name=network]');
-      if (net && !net.checked) {
-        var off = document.createElement('input');
-        off.type = 'hidden'; off.name = 'network'; off.value = '0';
-        form.appendChild(off);
-      }
       var shown = form.querySelectorAll('input[name=tabs]:checked').length;
       if (!shown) form.querySelectorAll('input[name=tabs]').forEach(function (b) { b.checked = true; });
     });

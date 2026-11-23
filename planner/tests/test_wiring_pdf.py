@@ -274,10 +274,12 @@ class WiringPdfTests(WiringShow, TestCase):
     def test_network_feeds_off(self):
         self.p1_out(self.sl, 'AVB', 2, 'Delay')
         self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
-        _, on = self.pdf(tabs='overview')
-        _, off = self.pdf(tabs='overview', network='0')
+        _, on = self.pdf(tabs='overview', network='1')
         self.assertIn('Stream 2', on[0])
-        self.assertNotIn('Stream 2', off[0])
+        # Off unless asked for: no parameter (the panel's box unticked), or 0.
+        for params in ({}, {'network': '0'}):
+            _, off = self.pdf(tabs='overview', **params)
+            self.assertNotIn('Stream 2', off[0])
         self.assertIn('AVB ← SL P1 stream 2 (Delay)', re.sub(r'\s+', ' ', off[0]))
 
     def test_keys_and_the_connections_table(self):
@@ -369,9 +371,14 @@ class WiringPageDownloadTests(WiringShow, TestCase):
     def test_the_page_has_the_panel_and_the_digest(self):
         response = self.client.get(reverse('planner:wiring_diagram'))
         self.assertContains(response, 'Download PDF')
+        self.assertContains(response, 'Download DXF')
         self.assertContains(response, f'action="{reverse("planner:wiring_diagram_pdf")}"')
+        self.assertContains(response, f'formaction="{reverse("planner:wiring_diagram_dxf")}"')
+        page = response.content.decode()
         for key in T.TAB_KEYS:
-            self.assertContains(response, f'name="tabs" value="{key}" checked')
+            self.assertRegex(page, rf'name="tabs" value="{key}"[^>]* checked>')
+        # Network feeds: off until ticked.
+        self.assertContains(response, '<input type="checkbox" name="network" value="1">')
         self.assertContains(response, 'name="paper" value="11x17" checked')
         self.assertContains(response, 'name="paper" value="24x36"')
         self.assertContains(response, f'Graph {digest(project_graph(self.project))}')

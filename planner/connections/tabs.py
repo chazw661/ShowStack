@@ -185,15 +185,6 @@ def without_network(graph):
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
 
 
-def without_b(graph):
-    """The graph with no B input links: what Download PDF draws (the PDF has
-    no style for them yet). Nodes are kept; each tab still picks its own."""
-    edges = [e for e in graph['edges'] if not e.get('b')]
-    kept = {e['id'] for e in edges}
-    return {**graph, 'edges': edges,
-            'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
-
-
 def comms_notes(graph, full):
     """``graph`` with ``comms_note`` on each device whose only links are
     comms links: "2 comms patches · see Comms tab". For the Overview and the

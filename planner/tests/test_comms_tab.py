@@ -298,7 +298,7 @@ class CommsPageTests(CommsShow, TestCase):
         self.assertGreaterEqual(page.count(ESCAPED), 6)
 
     def test_download_pdf_has_the_comms_tab(self):
-        from pypdf import PdfReader
+        from PyPDF2 import PdfReader     # pinned in requirements.txt; pypdf is not
         r = self.client.get(reverse('planner:wiring_diagram_pdf'), {'tabs': 'comms'})
         self.assertEqual(r.status_code, 200)
         pages = [p.extract_text() for p in PdfReader(io.BytesIO(r.content)).pages]
@@ -503,7 +503,7 @@ class CommsNoteTests(CommsShow, TestCase):
         self.assertTrue(all(not b.note for b in lay.boxes if b.label == 'Rio SL'))
 
     def test_the_pdf_has_the_same_text(self):
-        from pypdf import PdfReader
+        from PyPDF2 import PdfReader     # pinned in requirements.txt; pypdf is not
         for tab in ('overview', 'dante'):
             r = self.client.get(reverse('planner:wiring_diagram_pdf'), {'tabs': tab})
             self.assertEqual(r.status_code, 200)

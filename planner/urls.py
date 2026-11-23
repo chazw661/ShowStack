@@ -173,6 +173,7 @@ urlpatterns = [
     path('project/branding/', views_branding.project_branding, name='project_branding'),
     path('wiring-diagram/', views_wiring.wiring_diagram, name='wiring_diagram'),
     path('wiring-diagram/pdf/', views_wiring.wiring_diagram_pdf, name='wiring_diagram_pdf'),
+    path('wiring-diagram/dxf/', views_wiring.wiring_diagram_dxf, name='wiring_diagram_dxf'),
     path('mic-plan/', views_mic_plan.mic_plan, name='mic_plan'),
     path('mic-plan/upload/', views_mic_plan.showflow_upload, name='mic_plan_upload'),
     path('mic-plan/import/<int:pk>/confirm/', views_mic_plan.showflow_confirm, name='mic_plan_confirm'),
