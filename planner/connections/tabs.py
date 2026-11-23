@@ -14,12 +14,19 @@ draw each as its own section.
              link that is not Dante. A console link whose device has no
              Console connection set is kept and flagged ``connection_unset``.
   speakers   PA cable runs only: amps and racks -> speakers.
+  comms      the comms patch (``comms_tab.comms_view``): every comm device,
+             the devices patched to it and its 2-wire destinations, laid out
+             in the Comms tab's own three columns (``layout.COMMS_SCHEME``).
+
+On the Dante tab, once any device there has a Dante network set, device
+boxes sit under a header per network (``node['group']``), "No network set"
+last; consoles are not grouped.
 
 B input links (``edge['b']``) are console links like A's: they follow their
 device's Console connection onto Dante or Analogue/AES, so a device patched
 only on B is on its tab.
 
-Comms patch links (``edge['comm']``) are never drawn on these tabs: each tab
+Comms patch links (``edge['comm']``) are drawn on the Comms tab only: each other tab
 keeps the ones on its transport (Dante: dante; Analogue/AES: the 4-wire
 cables) for its Connections table and Warnings, and they bring no box with
 them. Every comm device is on the Dante tab, with its IPs.
@@ -34,13 +41,15 @@ box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
 plugs in where.
 """
 
-OVERVIEW, DANTE, ANALOG, SPEAKERS = 'overview', 'dante', 'analog', 'speakers'
+OVERVIEW, DANTE, ANALOG, SPEAKERS, COMMS = 'overview', 'dante', 'analog', 'speakers', 'comms'
 TABS = (
     (OVERVIEW, 'Overview'),
     (DANTE, 'Dante'),
     (ANALOG, 'Analogue/AES'),
     (SPEAKERS, 'Speaker cables'),
+    (COMMS, 'Comms'),
 )
+NO_NETWORK = 'No network set'
 TAB_KEYS = tuple(key for key, _ in TABS)
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceInput.console_input_b',
                        'DeviceOutput.console_output')
@@ -56,9 +65,11 @@ def layout_options(tab):
     """``layout()`` keyword arguments for a tab: the Overview keeps its
     columns (Processors and Unlinked feeds hide when empty); a tab hides
     every column it does not use."""
-    from planner.connections.layout import ALL_COLUMNS
+    from planner.connections.layout import ALL_COLUMNS, COMMS_SCHEME
     if tab == OVERVIEW:
         return {}
+    if tab == COMMS:
+        return {'scheme': COMMS_SCHEME, 'hide_empty': ()}
     options = {'hide_empty': ALL_COLUMNS}
     if tab == SPEAKERS:
         options['label_max'] = SPEAKER_LABEL_MAX
@@ -163,10 +174,33 @@ def without_b(graph):
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
 
 
+def _network_groups(nodes):
+    """Each device node with the Dante network header it sits under, once
+    any of them has a network set."""
+    spelling = {}
+    for n in nodes:
+        name = n.get('dante_network') or ''
+        if n['kind'] == 'device' and name:
+            spelling.setdefault(name.casefold(), name)
+    if not spelling:
+        return nodes
+    out = []
+    for n in nodes:
+        if n['kind'] == 'device':
+            key = (n.get('dante_network') or '').casefold()
+            n = {**n, 'group': {'key': f'net:{key}', 'label': spelling.get(key, NO_NETWORK),
+                                'order': 0 if key else None}}
+        out.append(n)
+    return out
+
+
 def graph_view(graph, tab):
     tab = tab_or_default(tab)
     if tab == OVERVIEW:
         return graph
+    if tab == COMMS:
+        from planner.connections.comms_tab import comms_view
+        return comms_view(graph)
     nodes = {n['id']: n for n in graph['nodes']}
     keep = KEEP[tab]
     edges = []
@@ -196,6 +230,8 @@ def graph_view(graph, tab):
             node['lines'] = [_ip_line(node)]
         out_nodes.append(node)
 
+    if tab == DANTE:
+        out_nodes = _network_groups(out_nodes)
     kept = {e['id'] for e in edges}
     return {**graph, 'nodes': out_nodes, 'edges': edges,
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}

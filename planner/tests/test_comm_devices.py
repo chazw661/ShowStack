@@ -589,9 +589,9 @@ class WiringTests(CommFixture, TestCase):
         page = self.client.get(reverse('planner:wiring_diagram')).content.decode()
         self.assertIn('Connections (4)', page)
         self.assertIn('<td>Arcadia · Dante Out 2–3</td><td>MK88 · Out 3–4</td>'
-                      '<td>Dante (network) (comms patch)</td>', page)
+                      '<td>Dante (network) · see the Comms tab</td>', page)
         self.assertIn('<td>Arcadia · 4W 1</td><td>Rio SL · In 3</td>'
-                      '<td>Analogue · 4W adapter (comms patch)</td>', page)
+                      '<td>Analogue · 4W adapter · see the Comms tab</td>', page)
         self.assertNotIn('Not drawn', page)
 
     def test_each_tab_lists_its_own_transport_and_dante_shows_the_comm_device(self):

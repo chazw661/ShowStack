@@ -53,6 +53,24 @@ that the badge clears its neighbours; it is listed in the page's
 Connections table (``Layout.keys``). Box titles, subtitles, extra lines,
 slot names and group headers wrap at BOX_W; a wrapped slot is taller. Two
 column titles carry a hint line under them (COLUMN_HINTS).
+
+A device box may sit under a group header in its own column (the graph
+node's ``group``: {key, label, order}; the Dante tab's Dante networks),
+ordered like the amp locations: by ``order`` then label, ``order`` None last.
+
+``layout(graph, scheme=COMMS_SCHEME)`` is the Comms tab (``tabs.comms_view``
+builds its graph): three columns instead of the seven --
+
+  0 To comms       a box per device feeding a comm device, one row per port
+  1 Comm devices   a box per comm device, one row per patched port
+  2 From comms     a box per device a comm device feeds; 2-wire destinations
+                   as typed; another comm device a Dante Out goes to
+
+Every box there is in port-row mode: its rows are named ports (the node's
+``rows``), drawn inside it, and a line meets the box on its port's row -- in
+on the left (``to_slot``), out on the right (``from_slot``), so a 4-wire
+port's receive and send are on one row at one height. A device patched both
+ways is two boxes, left and right, and every route still runs rightward.
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -67,6 +85,10 @@ COLUMN_HINTS = {'Device inputs': '(mics & sources plug in here)',
                 'Device outputs': '(feeds processors, amps, IEMs)'}
 HIDDEN_WHEN_EMPTY = (PROCESSOR, FEEDS)
 ALL_COLUMNS = tuple(range(len(COLUMN_TITLES)))
+DEFAULT_SCHEME, COMMS_SCHEME = 'default', 'comms'
+TO_COMMS, COMM_DEVICES, FROM_COMMS = range(3)
+COMMS_TITLES = ('To comms', 'Comm devices', 'From comms')
+COMMS_COLUMN = {'to': TO_COMMS, 'main': COMM_DEVICES, 'from': FROM_COMMS}
 
 BOX_W = 200
 HEAD = 34           # title + subtitle above the first port slot
@@ -126,6 +148,7 @@ class Box:
     in_h: list = field(default_factory=list)    # each input row's height
     out_h: list = field(default_factory=list)   # each output row's height (its label's lines)
     out_line: list = field(default_factory=list)  # where in its row each output's line runs
+    out_slot: dict = field(default_factory=dict)  # port-row mode: segment -> the row it leaves from
 
     @property
     def dummy(self):
@@ -172,6 +195,8 @@ class Box:
             return self.y + SLOT / 2
         if segment.to_box is self:
             return self.row_y(self.in_slot.get(segment, self.ins.index(segment)))
+        if segment in self.out_slot:
+            return self.row_y(self.out_slot[segment])
         return self.out_row_y(self.outs.index(segment))
 
 
@@ -318,13 +343,15 @@ def _location_group(node):
 
 
 class _Builder:
+    titles = COLUMN_TITLES
+
     def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
         self.hide_empty = hide_empty
         self.label_max = label_max
         self.graph = graph
         self.nodes = {n['id']: n for n in graph['nodes']}
         self.boxes = {}                 # box id -> Box
-        self.columns = [[] for _ in COLUMN_TITLES]
+        self.columns = [[] for _ in self.titles]
         self.groups = {}                # key -> Group
         self.segments = []
         self.edges = []                 # (edge, from box, to box)
@@ -346,11 +373,20 @@ class _Builder:
         sub = _where(node)
         if node.get('device_kind') == 'comm':
             sub = ' · '.join(x for x in ('Comm device', sub) if x)
-        if side == 'in':
-            return self.box(f"{node['id']}#in", label=name, column=IO_IN,
-                            kind='device', sub=sub, node=node['id'])
-        return self.box(f"{node['id']}#out", label=name, column=IO_OUT,
-                        kind='device', sub=sub, node=node['id'])
+        column = IO_IN if side == 'in' else IO_OUT
+        return self.box(f"{node['id']}#{side}", label=name, column=column,
+                        kind='device', sub=sub, node=node['id'],
+                        group=self.node_group(node, column))
+
+    def node_group(self, node, column):
+        """The header a node's box sits under in ``column`` (its ``group``),
+        or None. One header per column: a device's two boxes each get one."""
+        group = node.get('group')
+        if not group:
+            return None
+        key = f"{group['key']}@{column}"
+        self.groups.setdefault(key, (group['label'], group.get('order'), column))
+        return key
 
     def node_box(self, node_id, edge=None, end=None):
         node = self.nodes[node_id]
@@ -373,7 +409,7 @@ class _Builder:
                 key, label, order = '', NO_LOCATION, None
             else:
                 key, label, order = group
-            self.groups.setdefault(key, (label, order))
+            self.groups.setdefault(key, (label, order, AMP))
             style = ('unlinked' if node.get('unlinked')
                      else 'location' if kind == 'amp_location' else 'device')
             sub = (node.get('model') or 'Amp') if kind == 'amp' else (
@@ -391,6 +427,10 @@ class _Builder:
                         node=node_id)
 
     def build(self):
+        self.seed_boxes()
+        self.connect()
+
+    def seed_boxes(self):
         # Every node gets its boxes, connected or not, in the graph's order.
         for node in self.graph['nodes']:
             if node['kind'] == 'device':
@@ -401,6 +441,8 @@ class _Builder:
                     self.device_box(node, 'out')
             elif node['kind'] != 'unlinked':
                 self.node_box(node['id'])
+
+    def connect(self):
         for edge in self.graph['edges']:
             if edge.get('comm'):        # a comms patch link: listed, never drawn here
                 continue
@@ -412,7 +454,8 @@ class _Builder:
             self.edges.append((edge, src, dst))
         # A column with no box of its own is left out: no title, no width, and
         # no dummies, so lines cross the gap where it would be.
-        self.hidden = {c for c in self.hide_empty if not self.columns[c]}
+        self.hidden = {c for c in self.hide_empty
+                       if c < len(self.columns) and not self.columns[c]}
         for edge, src, dst in self.edges:
             chain = [src] + [self.box(f"{edge['id']}~{c}", label='', column=c, kind='dummy',
                                       style='dummy', h=SLOT)
@@ -426,9 +469,10 @@ class _Builder:
 
         ranked = sorted(self.groups.items(),
                         key=lambda kv: (kv[1][1] is None, kv[1][1] or 0, kv[1][0].casefold(), kv[0]))
-        self.groups = {key: Group(key, label, rank) for rank, (key, (label, _)) in enumerate(ranked)}
+        self.groups = {key: Group(key, label, rank, column)
+                       for rank, (key, (label, _, column)) in enumerate(ranked)}
         # Speaker arrays no cable reaches go last, under their own header.
-        for box in self.columns[SPEAKER]:
+        for box in (self.columns[SPEAKER] if self.titles is COLUMN_TITLES else ()):
             if box.kind == 'speaker_array' and not box.ins and not box.outs:
                 box.group = NOT_CABLED
                 self.groups.setdefault(NOT_CABLED, Group(NOT_CABLED, NOT_CABLED_LABEL, 1, SPEAKER))
@@ -471,7 +515,10 @@ class _Builder:
             if box.dummy:
                 continue
             named = self.nodes.get(box.node, {}).get('slots')
-            if named:
+            rows = self.port_rows(box)
+            if rows is not None:
+                self.name_rows(box, rows)
+            elif named:
                 self.name_slots(box, named)
             box.slot_lines = [wrap(label, TEXT_W, SLOT_CHAR_W) for label in box.slots]
             box.in_h = ([SLOT + SLOT_LH * (len(lines) - 1) for lines in box.slot_lines]
@@ -487,6 +534,23 @@ class _Builder:
                 box.out_h.append(h)
                 box.out_line.append(line)
             box.h = box.head + max(sum(box.in_h), sum(box.out_h), SLOT) + PAD
+
+    def port_rows(self, box):
+        """The box's named port rows ([{id, label}]) when it is in port-row
+        mode, else None."""
+        return None
+
+    def name_rows(self, box, rows):
+        """Port-row mode: every row is a named port; a line comes in on its
+        ``to_slot``'s row and leaves from its ``from_slot``'s."""
+        index = {row['id']: i for i, row in enumerate(rows)}
+        box.slots = [row['label'] for row in rows]
+        for seg in box.ins:
+            box.in_slot[seg] = index[seg.edge['to_slot']]
+        for seg in box.outs:
+            box.out_slot[seg] = index[seg.edge['from_slot']]
+        box.ins.sort(key=lambda s: box.in_slot[s])
+        box.outs.sort(key=lambda s: box.out_slot[s])
 
     def name_slots(self, box, named):
         """The slots this box's lines use, in the graph's input order; a line
@@ -662,11 +726,49 @@ def _simplify(points):
     return out
 
 
-def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
+class _CommsBuilder(_Builder):
+    """The Comms tab's three columns, every box in port-row mode. The graph
+    is ``tabs.comms_view``'s: an edge names the box each end is on
+    (``from_box`` / ``to_box``: 'to', 'main' or 'from') and its row there."""
+    titles = COMMS_TITLES
+
+    def seed_boxes(self):
+        # Every comm device is drawn, patched or not; the rest come with
+        # the lines that reach them.
+        for node in self.graph['nodes']:
+            if node.get('device_kind') == 'comm':
+                self.node_box(node['id'])
+
+    def node_box(self, node_id, edge=None, end=None):
+        node = self.nodes[node_id]
+        if node['kind'] == 'destination':
+            return self.box(node_id, label=node['label'], column=FROM_COMMS,
+                            kind='destination', sub='2-wire destination', node=node_id)
+        which = edge[f'{end}_box'] if edge else 'main'
+        sub = _where(node)
+        if node.get('device_kind') == 'comm':
+            sub = ' · '.join(x for x in ('Comm device', sub) if x)
+        return self.box(f'{node_id}#{which}', label=node['label'], column=COMMS_COLUMN[which],
+                        kind='device', sub=sub, node=node_id)
+
+    def port_rows(self, box):
+        if box.kind != 'device':
+            return None
+        which = box.id.rsplit('#', 1)[1]
+        used = ({s.edge['to_slot'] for s in box.ins} | {s.edge['from_slot'] for s in box.outs})
+        return [row for row in self.nodes[box.node].get('rows', {}).get(which, ())
+                if row['id'] in used]
+
+
+BUILDERS = {DEFAULT_SCHEME: _Builder, COMMS_SCHEME: _CommsBuilder}
+
+
+def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFAULT_SCHEME):
     """``hide_empty``: the columns left out when no box is in them (a tab
     passes ``ALL_COLUMNS``). ``label_max``: the widest a label line may be;
-    a wider one makes the label a key."""
-    b = _Builder(graph, hide_empty, label_max)
+    a wider one makes the label a key. ``scheme``: which columns (the
+    seven, or the Comms tab's three)."""
+    b = BUILDERS[scheme](graph, hide_empty, label_max)
     b.build()
     b.fit_labels()
     b.order()
@@ -675,10 +777,10 @@ def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
     b.place_x()
     routes = b.routes()
     boxes = [box for column in b.columns for box in column if not box.dummy]
-    shown = [b.column_x[c] for c in range(len(COLUMN_TITLES)) if c not in b.hidden]
+    shown = [b.column_x[c] for c in range(len(b.titles)) if c not in b.hidden]
     width = (max(shown) if shown else MARGIN) + BOX_W + MARGIN
     height = max([box.y + box.h for box in boxes] + [MARGIN + TITLE_H]) + MARGIN
-    columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(COLUMN_TITLES)
+    columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(b.titles)
                if c not in b.hidden]
     groups = sorted((g for g in b.groups.values()
                      if any(box.group == g.key for box in b.columns[g.column])),

@@ -64,8 +64,10 @@ console output (PR 2b-3), both confirmed; a linked input is never matched.
 The comms patch (``_comm_links``; ``connections/comm_patch.py``) is stored
 links too: a comm device's Dante ins / outs and 4-wire ports to and from the
 devices they are patched to, confirmed. Their edges carry ``comm: true``.
-Until the Comms tab draws them they are listed in the Connections table,
-never laid out. A Dante one between devices whose Dante networks are both
+The Comms tab draws them (``tabs.comms_view`` splits them one line per
+port); every other tab lists them in its Connections table and never lays
+them out. A comm device's 2-wire ports with a destination typed are on its
+node (``two_wire``), for the same tab. A Dante one between devices whose Dante networks are both
 set and differ is in ``warnings`` (kind ``dante_network``). A comm device's
 node carries ``device_kind: 'comm'``; any device with a Dante network set,
 ``dante_network``.
@@ -608,6 +610,13 @@ def _link_json(link):
         out[f'{side}_ref'] = port.ref if port else None
     if link.match:
         out['match'] = link.match
+    if link.comm:
+        # The ports' own names, for the Comms tab's rows.
+        for side, port in (('from', link.from_port), ('to', link.to_port)):
+            if port is not None and port.text:
+                out[f'{side}_name'] = port.text
+        if link.cable and link.cable.get('type'):
+            out['cable_type'] = link.cable['type']
     return out
 
 

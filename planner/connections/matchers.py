@@ -453,11 +453,19 @@ class ProjectIndex:
             self.linked_processor_inputs.add(ref)
 
         # Stored links: the comms patch (connections/comm_patch.py) ---------
-        for port in CommPort.objects.filter(device__project_id=pid,
-                                            kind=CommPort.FOUR_WIRE):
-            self._port(Port(ep.port_ref('commport', port.pk),
-                            ep.node_id(ep.DEVICE, port.device_id),
-                            ep.PortLabel('4W', port.number), pk=port.pk))
+        for port in CommPort.objects.filter(device__project_id=pid).order_by(
+                'device_id', 'kind', 'number'):
+            node = self.nodes.get(ep.node_id(ep.DEVICE, port.device_id))
+            if port.kind == CommPort.FOUR_WIRE:
+                self._port(Port(ep.port_ref('commport', port.pk),
+                                ep.node_id(ep.DEVICE, port.device_id),
+                                ep.PortLabel('4W', port.number), pk=port.pk))
+            elif port.destination.strip() and node is not None:
+                # A 2-wire port goes where its text says: no link, so it
+                # rides on the comm device's node (the Comms tab draws it).
+                node.extra.setdefault('two_wire', []).append({
+                    'number': port.number, 'destination': port.destination.strip(),
+                    'cable_type': port.cable_type.strip()})
         comm_cts = {ContentType.objects.get_for_model(model).pk: prefix
                     for model, prefix in ((DeviceInput, 'deviceinput'),
                                           (DeviceOutput, 'deviceoutput'),
