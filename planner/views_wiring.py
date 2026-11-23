@@ -19,7 +19,10 @@ printed stamp. B input links are drawn there as on screen: lighter, labelled
 ``wiring_diagram_dxf`` (Download DXF, for Vectorworks) writes one ``.dxf``
 per chosen tab, each the whole tab in one drawing (``connections.dxf``); a
 zip when more than one tab is asked for. Same ``?tabs=``, ``?network=`` and
-``?tz=``; ``?arrows=ascii`` writes "<-" / "->" for the arrows.
+``?tz=``; ``?arrows=ascii`` writes "<-" / "->" for the arrows. Its layers
+(Vectorworks classes) are named from ``?prefix=`` ("Audio-Wiring") and
+``?classes=split|single``, kept per project in the session; a ``.dxf`` is
+named for its tab, never its project.
 
 Both downloads leave the network feeds out unless ``?network=1`` (the
 panel's box, unticked by default); the screen's own toggle is unchanged.
@@ -218,6 +221,8 @@ def tab_view(project, full, tab, network=True):
 @staff_member_required
 @require_GET
 def wiring_diagram(request):
+    from planner.connections.dxf import MAX_PREFIX, MODES
+
     context = {'title': 'Wiring Diagram', **_shared_header_context(request)}
     project = _scoped_project(request)
     if project is None:
@@ -227,7 +232,12 @@ def wiring_diagram(request):
     network = request.GET.get('network') != '0'
     view = tab_view(project, full, tab, network)
     hints = download_hints(full)
+    dxf_prefix, dxf_mode = dxf_classes(request, project)
     context.update({
+        'dxf_prefix': dxf_prefix,
+        'dxf_mode': dxf_mode,
+        'dxf_modes': MODES,
+        'dxf_prefix_max': MAX_PREFIX,
         'project': project,
         'tab': tab,
         'tabs': [{'key': key, 'label': label, 'active': key == tab, 'pages': hints['tabs'][key]}
@@ -352,6 +362,30 @@ def wiring_diagram_pdf(request):
 
 
 DXF_TYPE = 'image/vnd.dxf'
+DXF_CLASSES_KEY = 'wiring_dxf_classes'      # session: {project pk: [prefix, mode]}
+
+
+def dxf_classes(request, project):
+    """(prefix, mode) for the DXF's layer names: what the request asks for,
+    else what this project's last download used (kept in the session), else
+    the defaults. Always clean: the prefix is the only typed text that ever
+    reaches a layer name."""
+    from planner.connections.dxf import DEFAULT_PREFIX, SPLIT, clean_mode, clean_prefix
+
+    kept = (request.session.get(DXF_CLASSES_KEY) or {}).get(str(project.pk)) or ()
+    prefix, mode = kept if len(kept) == 2 else (DEFAULT_PREFIX, SPLIT)
+    if 'prefix' in request.GET:
+        prefix = request.GET['prefix']
+    if 'classes' in request.GET:
+        mode = request.GET['classes']
+    return clean_prefix(prefix), clean_mode(mode)
+
+
+def _remember_dxf_classes(request, project, prefix, mode):
+    kept = dict(request.session.get(DXF_CLASSES_KEY) or {})
+    if kept.get(str(project.pk)) != [prefix, mode]:
+        kept[str(project.pk)] = [prefix, mode]
+        request.session[DXF_CLASSES_KEY] = kept
 
 
 @staff_member_required
@@ -368,14 +402,20 @@ def wiring_diagram_dxf(request):
     full = project_graph(project)
     graph_digest = digest(full)
     printed = stamp(timezone.now().astimezone(zone), zone)
-    stem = f'Wiring Diagram - {file_part(project.name)}'
+    prefix, mode = dxf_classes(request, project)
+    _remember_dxf_classes(request, project, prefix, mode)
+    # A .dxf is named for its tab only. Vectorworks offers the file's name as
+    # a prefix for the classes it imports, so a project named for its venue
+    # would end up in class names; the project is in the title block and in
+    # the zip's name.
     today = date.today().isoformat()
     files = []
     for tab in _tabs(request):
         view = tab_view(project, full, tab, _download_network(request))
         data = build_tab_dxf(project_name=project.name, view=view, digest=graph_digest,
-                             printed=printed, arrows=arrows, empty=not full['nodes'])
-        files.append((f"{stem} - {file_part(view['tab_label'])} - {today}.dxf", data))
+                             printed=printed, arrows=arrows, empty=not full['nodes'],
+                             prefix=prefix, mode=mode)
+        files.append((f"Wiring Diagram - {file_part(view['tab_label'])} - {today}.dxf", data))
     if len(files) == 1:
         name, data = files[0]
         response = HttpResponse(data, content_type=DXF_TYPE)
@@ -384,7 +424,7 @@ def wiring_diagram_dxf(request):
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
             for file_name, data in files:
                 archive.writestr(file_name, data)
-        name = f'{stem} - DXF - {today}.zip'
+        name = f'Wiring Diagram - {file_part(project.name)} - DXF - {today}.zip'
         response = HttpResponse(buffer.getvalue(), content_type='application/zip')
     response['Content-Disposition'] = content_disposition_header(True, name)
     return response

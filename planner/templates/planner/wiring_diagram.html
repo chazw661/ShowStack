@@ -72,6 +72,8 @@
   .wd-pdf-panel legend { color: #aaa; font-size: 11px; font-weight: 600; padding: 0; margin-bottom: 4px;
                          text-transform: uppercase; letter-spacing: .04em; }
   .wd-pdf-panel label { display: block; color: #eee; font-size: 13px; margin: 2px 0; white-space: nowrap; }
+  .wd-pdf-panel input[type=text] { background: #1d2733; color: #eee; border: 1px solid var(--ss-border);
+                                   border-radius: 4px; padding: 2px 6px; font-size: 13px; }
   .wd-pages { color: #aaa; font-size: 12px; }
   .wd-pdf-hint { color: #f6c04f; font-size: 12px; margin: 0 0 8px; max-width: 300px; }
   .wd-pdf-hint:empty { display: none; }
@@ -138,13 +140,17 @@
           <fieldset><legend>Paper (PDF only)</legend>
             {% for key, label in papers %}<label><input type="radio" name="paper" value="{{ key }}"{% if forloop.first %} checked{% endif %}> {{ label }}</label>{% endfor %}
           </fieldset>
+          <fieldset><legend>Vectorworks classes (DXF only)</legend>
+            <label>Vectorworks class prefix <input type="text" name="prefix" value="{{ dxf_prefix }}" maxlength="{{ dxf_prefix_max }}" size="16" autocomplete="off" spellcheck="false" title="Letters, numbers, spaces, _ and -"></label>
+            {% for key, label in dxf_modes %}<label><input type="radio" name="classes" value="{{ key }}"{% if key == dxf_mode %} checked{% endif %}> {{ label }}</label>{% endfor %}
+          </fieldset>
           <p class="wd-pdf-hint" id="wd-pdf-hint" role="status">{{ page_suggestion }}</p>
           <input type="hidden" name="tz" value="">
           <div class="wd-pdf-buttons">
             <button type="submit" class="wd-toggle">Download PDF</button>
             <button type="submit" class="wd-toggle" formaction="{{ dxf_url }}">Download DXF</button>
           </div>
-          <p class="wd-pdf-note">Pages are the PDF's diagram pages; its Connections table and Warnings follow. DXF (for Vectorworks) is one whole drawing per tab, zipped when more than one tab is ticked.</p>
+          <p class="wd-pdf-note">Pages are the PDF's diagram pages; its Connections table and Warnings follow. DXF (for Vectorworks) is one whole drawing per tab, zipped when more than one tab is ticked. Split classes: prefix-Boxes, -Text, -Confirmed and so on; Single class: everything on the prefix.</p>
         </form>
       </details>
     </div>

@@ -18,7 +18,7 @@ from planner.connections import dxf
 from planner.connections import layout as L
 from planner.connections import tabs as T
 from planner.connections.graph import digest, project_graph
-from planner.models import ConsoleAuxOutput, ProjectMember
+from planner.models import AmpLocation, ConsoleAuxOutput, Project, ProjectMember
 from planner.tests.test_comm_devices import PLAIN_STATIC
 from planner.tests.test_comms_tab import CommsShow
 from planner.tests.test_wiring_layout import WiringShow
@@ -29,6 +29,9 @@ from planner.views_wiring import (MANY_PAGES, download_hints, file_part, suggest
 NAME = '<img src=x onerror=alert(1)>'
 QUOTED = '"\'><b>&amp; ]]> Łódź'
 TAB_FILES = ('Overview', 'Dante', 'Analogue-AES', 'Speaker cables', 'Comms')
+SPLIT_LAYERS = {'Audio-Wiring-' + word for word in (
+    'Boxes', 'Text', 'Confirmed', 'Inferred', 'Unlinked', 'Network', 'Speaker', 'Comms',
+    'Table', 'Title')}
 EDGE_LAYERS = (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED, dxf.NETWORK, dxf.SPEAKER, dxf.COMMS)
 
 
@@ -40,9 +43,21 @@ def read(data):
     return doc
 
 
+def role(entity, prefix=dxf.DEFAULT_PREFIX):
+    """What the entity's layer holds: its name without "<prefix>-"."""
+    name = entity.dxf.layer
+    assert name.startswith(prefix + '-'), name
+    return name[len(prefix) + 1:]
+
+
+def layer_names_of(doc):
+    """Every layer in the file but the two every DXF has."""
+    return {layer.dxf.name for layer in doc.layers} - {'0', 'Defpoints'}
+
+
 def texts(doc, layer=None):
     return [e.plain_text() for e in doc.modelspace().query('TEXT')
-            if layer is None or e.dxf.layer == layer]
+            if layer is None or role(e) == layer]
 
 
 def squash(text):
@@ -51,7 +66,7 @@ def squash(text):
 
 def lines_of(doc, layers=EDGE_LAYERS):
     return [e for e in doc.modelspace().query('LWPOLYLINE')
-            if not e.closed and e.dxf.layer in layers]
+            if not e.closed and role(e) in layers]
 
 
 class DxfMixin:
@@ -155,7 +170,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         response = self.get(tabs='speakers')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'image/vnd.dxf')
-        self.assertIn(f'Wiring Diagram - wiring show - Speaker cables - {date.today().isoformat()}.dxf',
+        self.assertIn(f'Wiring Diagram - Speaker cables - {date.today().isoformat()}.dxf',
                       response['Content-Disposition'])
         doc = read(response.content)
         self.assertEqual(doc.dxfversion, 'AC1024')
@@ -163,12 +178,13 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
     def test_more_than_one_tab_is_a_zip_with_a_file_each(self):
         response = self.get(tabs='overview,speakers')
         self.assertEqual(response['Content-Type'], 'application/zip')
-        self.assertIn('.zip', response['Content-Disposition'])
+        self.assertIn(f'Wiring Diagram - wiring show - DXF - {date.today().isoformat()}.zip',
+                      response['Content-Disposition'])
         archive = zipfile.ZipFile(io.BytesIO(response.content))
         today = date.today().isoformat()
         self.assertEqual(archive.namelist(), [
-            f'Wiring Diagram - wiring show - Overview - {today}.dxf',
-            f'Wiring Diagram - wiring show - Speaker cables - {today}.dxf'])
+            f'Wiring Diagram - Overview - {today}.dxf',
+            f'Wiring Diagram - Speaker cables - {today}.dxf'])
         for name in archive.namelist():
             doc = read(archive.read(name))
             self.assertIn(self.project.name, texts(doc, dxf.TITLE))
@@ -178,7 +194,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
             archive = zipfile.ZipFile(io.BytesIO(self.get(**params).content))
             today = date.today().isoformat()
             self.assertEqual(archive.namelist(),
-                             [f'Wiring Diagram - wiring show - {tab} - {today}.dxf' for tab in TAB_FILES])
+                             [f'Wiring Diagram - {tab} - {today}.dxf' for tab in TAB_FILES])
             self.assertIsNone(archive.testzip())
             labels = dict(T.TABS)
             for name, key in zip(archive.namelist(), T.TAB_KEYS):
@@ -189,19 +205,17 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         doc = self.dxf('overview')
         self.assertEqual(doc.header['$INSUNITS'], 1)                    # inches
         self.assertEqual(doc.header['$MEASUREMENT'], 0)
-        for name in ('WD-BOXES', 'WD-TEXT', 'WD-CONFIRMED', 'WD-INFERRED', 'WD-UNLINKED',
-                     'WD-NETWORK', 'WD-SPEAKER', 'WD-COMMS', 'WD-TABLE', 'WD-TITLE'):
-            self.assertTrue(doc.layers.has_entry(name), name)
+        self.assertEqual(layer_names_of(doc), SPLIT_LAYERS)
         for name in ('CONTINUOUS', 'DASHED', 'DOT'):
             self.assertTrue(doc.linetypes.has_entry(name), name)
         self.assertEqual(doc.styles.get('Arial').dxf.font, 'arial.ttf')
         self.assertEqual(doc.styles.get('Arial-Bold').dxf.font, 'arialbd.ttf')
         self.assertEqual(doc.styles.get('Arial').get_extended_font_data()[0], 'Arial')
-        # Nothing drawn off the WD- layers, and all text is real TEXT in Arial.
+        # Nothing drawn off those layers, and all text is real TEXT in Arial.
         kinds = {e.dxftype() for e in doc.modelspace()}
         self.assertEqual(kinds, {'TEXT', 'LWPOLYLINE', 'LINE', 'SOLID'})
         for e in doc.modelspace():
-            self.assertTrue(e.dxf.layer.startswith('WD-'), e.dxf.layer)
+            self.assertIn(e.dxf.layer, SPLIT_LAYERS)
         self.assertEqual({e.dxf.style for e in doc.modelspace().query('TEXT')},
                          {'Arial', 'Arial-Bold'})
 
@@ -213,7 +227,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         [entity] = [e for e in doc.modelspace().query('TEXT') if e.plain_text() == slot]
         self.assertAlmostEqual(entity.dxf.height, 0.125, places=4)
         box = next(e for e in doc.modelspace().query('LWPOLYLINE')
-                   if e.closed and e.dxf.layer == dxf.BOXES)
+                   if e.closed and role(e) == dxf.BOXES)
         xs = [p[0] for p in box.get_points('xy')]
         self.assertAlmostEqual(max(xs) - min(xs), L.BOX_W * dxf.UNIT, places=3)
         self.assertAlmostEqual(L.BOX_W * dxf.UNIT, 3.49, places=2)
@@ -228,20 +242,20 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
             doc = self.dxf(tab, network='1')
             msp = doc.modelspace()
             closed = [e for e in msp.query('LWPOLYLINE') if e.closed]
-            self.assertEqual(sum(e.dxf.layer == dxf.BOXES for e in closed), len(lay.boxes), tab)
-            self.assertEqual(sum(e.dxf.layer == dxf.TEXT for e in closed), len(lay.keys), tab)
+            self.assertEqual(sum(role(e) == dxf.BOXES for e in closed), len(lay.boxes), tab)
+            self.assertEqual(sum(role(e) == dxf.TEXT for e in closed), len(lay.keys), tab)
             self.assertEqual(len(lines_of(doc)), len(lay.routes), tab)
             self.assertEqual(len(msp.query('SOLID')), len(lay.routes), tab)
             if tab in (T.OVERVIEW, T.SPEAKERS):
                 self.assertTrue(lay.routes, tab)
             # every arrowhead is on its line's layer, at the line's end
-            ends = sorted((e.dxf.layer, tuple(round(float(v), 4) for v in e.get_points('xy')[-1]))
+            ends = sorted((role(e), tuple(round(float(v), 4) for v in e.get_points('xy')[-1]))
                           for e in lines_of(doc))
-            heads = sorted((e.dxf.layer, (round(e.dxf.vtx0.x, 4), round(e.dxf.vtx0.y, 4)))
+            heads = sorted((role(e), (round(e.dxf.vtx0.x, 4), round(e.dxf.vtx0.y, 4)))
                            for e in msp.query('SOLID'))
             self.assertEqual(ends, heads, tab)
             # group rules: one per group header
-            rules = [e for e in msp.query('LINE') if e.dxf.layer == dxf.BOXES]
+            rules = [e for e in msp.query('LINE') if role(e) == dxf.BOXES]
             self.assertEqual(len(rules), len(lay.groups), tab)
 
     def test_lines_are_on_the_layer_and_linetype_of_their_link(self):
@@ -250,7 +264,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         view = self.tab(T.OVERVIEW, network=True)
         edges = {e['id']: e for e in view['graph']['edges']}
         doc = self.dxf('overview', network='1')
-        got = sorted((e.dxf.layer, e.dxf.linetype.upper()) for e in lines_of(doc))
+        got = sorted((role(e), e.dxf.linetype.upper()) for e in lines_of(doc))
         want = sorted((dxf.edge_layer(T.OVERVIEW, r.classes, edges[r.id]), dxf.edge_linetype(r.classes))
                       for r in view['layout'].routes)
         self.assertEqual(got, want)
@@ -265,7 +279,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.assertIn((dxf.SPEAKER, 'CONTINUOUS'), got)
         # an unlinked box is dashed
         dashed = [e for e in doc.modelspace().query('LWPOLYLINE')
-                  if e.closed and e.dxf.layer == dxf.BOXES and e.dxf.linetype == 'DASHED']
+                  if e.closed and role(e) == dxf.BOXES and e.dxf.linetype == 'DASHED']
         self.assertEqual(len(dashed), sum(b.style == 'unlinked' for b in view['layout'].boxes))
         self.assertTrue(dashed)
 
@@ -315,7 +329,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.assertEqual(title[3], dxf.scale_text())
         for label, _ in dxf.LEGEND:
             self.assertIn(label, title)
-        samples = [e for e in doc.modelspace().query('LINE') if e.dxf.layer == dxf.TITLE]
+        samples = [e for e in doc.modelspace().query('LINE') if role(e) == dxf.TITLE]
         self.assertEqual([e.dxf.linetype for e in samples], ['CONTINUOUS', 'DASHED', 'DASHED', 'DOT'])
         self.assertIn(' UTC ', texts(self.dxf('dante', tz='not/a_zone'), dxf.TITLE)[2])
         # no tiling, no page markers, in any tab
@@ -378,9 +392,9 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
             self.assertIn(squash(dxf.warning_text(w)), joined)
         # the table sits below the diagram
         lowest_box = min(p[1] for e in doc.modelspace().query('LWPOLYLINE')
-                         if e.dxf.layer == dxf.BOXES for p in e.get_points('xy'))
+                         if role(e) == dxf.BOXES for p in e.get_points('xy'))
         for e in doc.modelspace().query('TEXT'):
-            if e.dxf.layer == dxf.TABLE:
+            if role(e) == dxf.TABLE:
                 self.assertLess(e.dxf.insert.y, lowest_box)
 
     def test_no_warnings_says_none(self):
@@ -477,6 +491,178 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
+class ClassNameTests(SimpleTestCase):
+    def test_a_prefix_keeps_only_letters_digits_space_underscore_and_hyphen(self):
+        self.assertEqual(dxf.clean_prefix('Audio-Wiring'), 'Audio-Wiring')
+        self.assertEqual(dxf.clean_prefix('  My Show_2 - A/V  '), 'My Show_2 - AV')
+        self.assertEqual(dxf.clean_prefix('--Audio--'), 'Audio')
+        self.assertEqual(dxf.clean_prefix(' - x - '), 'x')
+        self.assertEqual(dxf.clean_prefix('<b>Łódź|*"$0\n9;'), 'bd09')
+        self.assertEqual(dxf.clean_prefix('a' * 60 + '-'), 'a' * dxf.MAX_PREFIX)
+        self.assertEqual(dxf.clean_prefix('a' * (dxf.MAX_PREFIX - 1) + '-b'), 'a' * (dxf.MAX_PREFIX - 1))
+        for nothing in ('', None, '---', ' ', '/\\|', 'Ł'):
+            self.assertEqual(dxf.clean_prefix(nothing), 'Audio-Wiring')
+
+    def test_the_two_modes(self):
+        self.assertEqual(set(dxf.layer_names().values()), SPLIT_LAYERS)
+        self.assertEqual(set(dxf.layer_names('Rig', dxf.SPLIT).values()),
+                         {name.replace('Audio-Wiring', 'Rig') for name in SPLIT_LAYERS})
+        self.assertEqual(set(dxf.layer_names('Rig', dxf.SINGLE).values()), {'Rig'})
+        self.assertEqual(set(dxf.layer_names('Rig', 'nonsense').values()),
+                         set(dxf.layer_names('Rig', dxf.SPLIT).values()))
+        self.assertEqual(set(dxf.layer_names('-/-', dxf.SINGLE).values()), {'Audio-Wiring'})
+
+    def test_dot_has_no_zero_length_element(self):
+        # A zero-length dot has nothing to stroke: a short dash and a gap instead.
+        patterns = {name: pattern for name, _, pattern in dxf.LINETYPES}
+        for name, (total, *elements) in patterns.items():
+            self.assertTrue(all(abs(e) > 0.01 for e in elements), name)
+            self.assertAlmostEqual(total, sum(abs(e) for e in elements))
+            self.assertEqual([e > 0 for e in elements], [True, False], name)
+        self.assertLess(patterns['DOT'][1], patterns['DASHED'][1])
+
+
+def styling(doc):
+    """Each entity's own kind, colour and linetype, in file order."""
+    return [(e.dxftype(), e.dxf.color, e.dxf.get('true_color'), e.dxf.linetype.upper())
+            for e in doc.modelspace()]
+
+
+class DxfClassesTests(DxfMixin, WiringShow, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.user.is_staff = True
+        self.user.save()
+        # Every kind of line, a B-free show: network, inferred, unlinked, speaker.
+        self.p1_out(self.sl, 'AVB', 2, 'Delay')
+        self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
+
+    def test_split_is_the_default_and_the_layers_are_exactly_the_ten(self):
+        for tab in T.TAB_KEYS:
+            doc = self.dxf(tab, network='1')
+            self.assertEqual(layer_names_of(doc), SPLIT_LAYERS, tab)
+            self.assertLessEqual({e.dxf.layer for e in doc.modelspace()}, SPLIT_LAYERS, tab)
+        self.assertEqual(layer_names_of(self.dxf('overview', classes='nonsense')), SPLIT_LAYERS)
+
+    def test_no_project_venue_or_location_name_is_ever_a_layer_or_file_name(self):
+        self.project.name = 'Harbour Hall Gala'
+        self.project.save()
+        AmpLocation.objects.filter(project=self.project, name='SL Racks').update(name='Harbour Hall')
+        self.desk.name = 'Harbour Hall FOH'
+        self.desk.save()
+        response = self.get(network='1')                               # every tab
+        archive = zipfile.ZipFile(io.BytesIO(response.content))
+        seen = 0
+        for name in archive.namelist():
+            self.assertNotIn('Harbour', name)
+            doc = read(archive.read(name))
+            self.assertEqual(layer_names_of(doc), SPLIT_LAYERS, name)
+            named = [entry.dxf.name for table in (doc.layers, doc.styles, doc.linetypes, doc.appids,
+                                                  doc.block_records, doc.dimstyles, doc.ucs,
+                                                  doc.views, doc.viewports)
+                     for entry in table] + [block.name for block in doc.blocks]
+            self.assertTrue(named)
+            self.assertFalse([n for n in named if 'harbour' in n.lower()], name)
+            # ... and in the whole file the name is only ever a TEXT's value.
+            lines = archive.read(name).decode('utf-8').splitlines()
+            hits = [i for i, line in enumerate(lines) if 'Harbour' in line]
+            seen += len(hits)
+            self.assertTrue(all(lines[i - 1].strip() == '1' for i in hits), name)
+            self.assertEqual(len(hits), sum('Harbour' in t for t in texts(doc)), name)
+        self.assertGreater(seen, len(archive.namelist()))               # title blocks, and more
+        # single class: the same holds
+        doc = self.dxf('overview', classes='single')
+        self.assertEqual(layer_names_of(doc), {'Audio-Wiring'})
+
+    def test_single_class_puts_everything_on_the_prefix(self):
+        for tab in T.TAB_KEYS:
+            doc = self.dxf(tab, network='1', classes='single')
+            self.assertEqual(layer_names_of(doc), {'Audio-Wiring'}, tab)
+            self.assertEqual({e.dxf.layer for e in doc.modelspace()}, {'Audio-Wiring'}, tab)
+
+    def test_every_entity_states_its_own_colour_and_linetype(self):
+        for mode in ('split', 'single'):
+            for tab in T.TAB_KEYS:
+                doc = self.dxf(tab, network='1', classes=mode)
+                for e in doc.modelspace():
+                    self.assertTrue(e.dxf.hasattr('color') and e.dxf.hasattr('linetype'), (mode, tab))
+                    self.assertEqual(e.dxf.color, 7)                    # never 256, BYLAYER
+                    self.assertIn(e.dxf.linetype, ('CONTINUOUS', 'DASHED', 'DOT'))
+
+    def test_single_class_keeps_the_styling_of_split(self):
+        for tab in T.TAB_KEYS:
+            split = self.dxf(tab, network='1')
+            single = self.dxf(tab, network='1', classes='single')
+            self.assertEqual(styling(single), styling(split), tab)
+        # ... which tells confirmed, inferred, unlinked and network lines apart
+        doc = self.dxf('overview', network='1', classes='single')
+        lines = {(e.dxf.get('true_color'), e.dxf.linetype)
+                 for e in doc.modelspace().query('LWPOLYLINE') if not e.closed}
+        for want in ((0x2b4c7e, 'CONTINUOUS'), (0x2b4c7e, 'DASHED'), (0xb7791f, 'DASHED'),
+                     (0x2f855a, 'DOT')):
+            self.assertIn(want, lines)
+        heads = {e.dxf.get('true_color') for e in doc.modelspace().query('SOLID')}
+        self.assertEqual(heads, {0x2b4c7e, 0xb7791f, 0x2f855a})
+        boxes = [e for e in doc.modelspace().query('LWPOLYLINE') if e.closed]
+        self.assertIn((0x4a6f9a, 'DASHED'), {(e.dxf.get('true_color'), e.dxf.linetype) for e in boxes})
+        ink = [e for e in doc.modelspace().query('TEXT')]
+        self.assertTrue(all(not e.dxf.hasattr('true_color') for e in ink))
+
+    def test_the_linetype_table_has_the_dash_dot_patterns(self):
+        doc = self.dxf('overview')
+        lengths = {name: [tag.value for tag in doc.linetypes.get(name).pattern_tags.tags if tag.code == 49]
+                   for name in ('DASHED', 'DOT')}
+        for name, values in lengths.items():
+            self.assertEqual(len(values), 2, name)
+            self.assertGreater(values[0], 0, name)                      # a dash, never a 0 dot
+            self.assertLess(values[1], 0, name)
+
+    def test_a_typed_prefix_is_cleaned_and_names_the_layers(self):
+        doc = self.dxf('overview', prefix='  <Tour> A/V_26 - ', network='1')
+        want = {'Tour AV_26-' + name[len('Audio-Wiring-'):] for name in SPLIT_LAYERS}
+        self.assertEqual(layer_names_of(doc), want)
+        self.assertLessEqual({e.dxf.layer for e in doc.modelspace()}, want)
+        doc = self.dxf('overview', prefix='Tour', classes='single')
+        self.assertEqual(layer_names_of(doc), {'Tour'})
+        for nothing in ('', '---', '<>'):
+            self.assertEqual(layer_names_of(self.dxf('overview', prefix=nothing, classes='split')),
+                             SPLIT_LAYERS)
+
+    def test_the_prefix_and_mode_are_remembered_for_this_project_only(self):
+        page = lambda: self.client.get(reverse('planner:wiring_diagram')).content.decode()
+        self.login()
+        first = page()
+        self.assertIn('name="prefix" value="Audio-Wiring"', first)
+        self.assertIn('name="classes" value="split" checked', first)
+        self.assertNotIn('name="classes" value="single" checked', first)
+        self.dxf('overview', prefix='Tour/Rig', classes='single')
+        again = page()
+        self.assertIn('name="prefix" value="TourRig"', again)
+        self.assertIn('name="classes" value="single" checked', again)
+        # a download that names neither uses what was kept
+        self.assertEqual(layer_names_of(read(self.client.get(self.dxf_url, {'tabs': 'dante'}).content)),
+                         {'TourRig'})
+        other = Project.objects.create(name='other show', owner=self.user)
+        session = self.client.session
+        session['current_project_id'] = other.pk
+        session.save()
+        # (an empty project has no Download panel: ask its download instead)
+        fresh = read(self.client.get(self.dxf_url, {'tabs': 'dante'}).content)
+        self.assertEqual(layer_names_of(fresh), SPLIT_LAYERS)
+        session = self.client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+        self.assertIn('name="prefix" value="TourRig"', page())
+
+    def test_the_panel_explains_the_field(self):
+        self.login()
+        page = self.client.get(reverse('planner:wiring_diagram')).content.decode()
+        self.assertIn('Vectorworks class prefix', page)
+        self.assertIn('> Split classes</label>', page)
+        self.assertIn('> Single class</label>', page)
+        self.assertIn(f'maxlength="{dxf.MAX_PREFIX}"', page)
+
+
 class CommsDxfTests(DxfMixin, CommsShow, TestCase):
     def setUp(self):
         super().setUp()
@@ -492,15 +678,15 @@ class CommsDxfTests(DxfMixin, CommsShow, TestCase):
         lines = lines_of(doc)
         self.assertEqual(len(lines), len(lay.routes))
         for line in lines:
-            self.assertEqual(line.dxf.layer, dxf.COMMS)
+            self.assertEqual(role(line), dxf.COMMS)
             xs = [p[0] for p in line.get_points('xy')]
             self.assertEqual(xs, sorted(xs))                    # never right to left
             self.assertGreater(xs[-1], xs[0])
         heads = doc.modelspace().query('SOLID')
         self.assertEqual(len(heads), len(lay.routes))
-        self.assertEqual({e.dxf.layer for e in heads}, {dxf.COMMS})
+        self.assertEqual({role(e) for e in heads}, {dxf.COMMS})
         boxes = [e for e in doc.modelspace().query('LWPOLYLINE')
-                 if e.closed and e.dxf.layer == dxf.BOXES]
+                 if e.closed and role(e) == dxf.BOXES]
         self.assertEqual(len(boxes), len(lay.boxes))
         got = texts(doc, dxf.TEXT)
         for text in ('TO COMMS', 'COMM DEVICES', 'FROM COMMS', 'Arcadia', 'Arcadia B',

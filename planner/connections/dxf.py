@@ -12,20 +12,31 @@ Connections table and Warnings as text.
              formatting codes to escape): titles, subtitles, slot names,
              line labels, "[n]" keys, column titles and hints, group headers
 
-Layers. A line is on one layer: the kind of link when it has one, else how
-sure it is --
+Layers (Vectorworks imports them as classes). Their names are a prefix the
+person downloading chose (``clean_prefix``; "Audio-Wiring" unless they say)
+plus a fixed word, and nothing else: never a project, venue or location
+name. Two modes:
 
-  WD-COMMS      every line on the Comms tab
-  WD-SPEAKER    speaker cable runs
-  WD-NETWORK    AVB / Dante network feeds
-  WD-CONFIRMED / WD-INFERRED / WD-UNLINKED   everything else, and every B
-                input link (lighter, labelled "(B)")
+  split (default)   <prefix>-Boxes, -Text, -Confirmed, -Inferred, -Unlinked,
+                    -Network, -Speaker, -Comms, -Table, -Title
+  single            everything on <prefix>
 
-and its linetype is set on the line itself (CONTINUOUS / DASHED / DOT, the
-screen's styles), so a speaker run still shows whether it is confirmed.
-WD-BOXES holds boxes and group rules; WD-TEXT every text of the diagram and
-the key badges; WD-TITLE the title block and legend; WD-TABLE the
-Connections table and Warnings.
+In split mode a line is on one layer, the kind of link when it has one,
+else how sure it is --
+
+  -Comms      every line on the Comms tab
+  -Speaker    speaker cable runs
+  -Network    AVB / Dante network feeds
+  -Confirmed / -Inferred / -Unlinked   everything else, and every B input
+              link (lighter, labelled "(B)")
+
+-Boxes holds boxes and group rules; -Text every text of the diagram and the
+key badges; -Title the title block and legend; -Table the Connections table
+and Warnings.
+
+Every entity carries its own colour and linetype (CONTINUOUS / DASHED / DOT,
+the screen's styles), never BYLAYER: a speaker run still shows whether it is
+confirmed, and a single-class drawing looks the same as a split one.
 
 Units are inches. One layout unit is UNIT inches, chosen so the 10-unit
 slot text is 1/8" high (a DXF text height is the capital height, 0.716 em
@@ -53,21 +64,28 @@ ARROWS_ASCII = 'ascii'
 MAX_TEXT = 500                  # one TEXT value; far under the format's limit
 MIN_WIDTH = 0.6                 # a too-long line is squeezed to no less than this
 
-BOXES, TEXT, TITLE, TABLE = 'WD-BOXES', 'WD-TEXT', 'WD-TITLE', 'WD-TABLE'
-CONFIRMED, INFERRED, UNLINKED = 'WD-CONFIRMED', 'WD-INFERRED', 'WD-UNLINKED'
-NETWORK, SPEAKER, COMMS = 'WD-NETWORK', 'WD-SPEAKER', 'WD-COMMS'
+# What a layer holds. Its name is the prefix plus this word (``layer_names``).
+BOXES, TEXT, TITLE, TABLE = 'Boxes', 'Text', 'Title', 'Table'
+CONFIRMED, INFERRED, UNLINKED = 'Confirmed', 'Inferred', 'Unlinked'
+NETWORK, SPEAKER, COMMS = 'Network', 'Speaker', 'Comms'
 INK = 7                         # ACI 7: black on a light page, white on a dark one
-LAYERS = (                      # name, true colour (None: INK)
+ROLES = (                       # word, true colour (None: INK)
     (BOXES, 0x4a6f9a), (TEXT, None), (CONFIRMED, 0x2b4c7e), (INFERRED, 0x2b4c7e),
     (UNLINKED, 0xb7791f), (NETWORK, 0x2f855a), (SPEAKER, 0x2b4c7e), (COMMS, 0x2b4c7e),
     (TABLE, None), (TITLE, None),
 )
-LAYER_COLOUR = dict(LAYERS)
+ROLE_COLOUR = dict(ROLES)
+DEFAULT_PREFIX = 'Audio-Wiring'
+MAX_PREFIX = 40
+SPLIT, SINGLE = 'split', 'single'
+MODES = ((SPLIT, 'Split classes'), (SINGLE, 'Single class'))
 CONTINUOUS, DASHED, DOT = 'CONTINUOUS', 'DASHED', 'DOT'
-# Patterns in inches, the screen's dashes at this drawing's scale.
+# Patterns in inches, the screen's dashes at this drawing's scale. DOT is a
+# short dash and a gap (the screen's "2 3"), not a true zero-length dot: a
+# dot has no length to stroke, so it imports as nothing or as a solid line.
 LINETYPES = (
     (DASHED, 'Dashed __ __ __ __', [10 * UNIT, 6 * UNIT, -4 * UNIT]),
-    (DOT, 'Dot . . . . . . . .', [3 * UNIT, 0.0, -3 * UNIT]),
+    (DOT, 'Dot . . . . . . . .', [5 * UNIT, 2 * UNIT, -3 * UNIT]),
 )
 STYLE, STYLE_BOLD = 'Arial', 'Arial-Bold'
 B_FADE = 0.45                   # a B link's colour, this much of it over white
@@ -119,8 +137,32 @@ def clean(text, arrows=''):
     return s.replace('^', '^ ')
 
 
+_NOT_PREFIX = re.compile(r'[^A-Za-z0-9 _-]+')
+
+
+def clean_prefix(text):
+    """``text`` as a layer-name prefix: only letters, digits, space, "_" and
+    "-", no "-" or space at either end, at most MAX_PREFIX long; the default
+    when nothing is left."""
+    s = _NOT_PREFIX.sub('', '' if text is None else str(text))
+    s = re.sub(r' {2,}', ' ', s).strip(' -')[:MAX_PREFIX].strip(' -')
+    return s or DEFAULT_PREFIX
+
+
+def clean_mode(mode):
+    return SINGLE if mode == SINGLE else SPLIT
+
+
+def layer_names(prefix=DEFAULT_PREFIX, mode=SPLIT):
+    """{what a layer holds: its name}. These are the only layers written."""
+    prefix = clean_prefix(prefix)
+    if clean_mode(mode) == SINGLE:
+        return {role: prefix for role, _ in ROLES}
+    return {role: f'{prefix}-{role}' for role, _ in ROLES}
+
+
 def edge_layer(tab, classes, edge):
-    """The layer a route's line and arrowhead are on."""
+    """What the layer a route's line and arrowhead are on holds."""
     status = (UNLINKED if 'unlinked' in classes else
               INFERRED if 'inferred' in classes else CONFIRMED)
     if 'b' in classes:
@@ -154,7 +196,7 @@ def _fade(colour):
 class _Drawing:
     """Model space in layout units (x right, y down), written in inches."""
 
-    def __init__(self, ezdxf, arrows):
+    def __init__(self, ezdxf, arrows, prefix=DEFAULT_PREFIX, mode=SPLIT):
         from ezdxf.enums import TextEntityAlignment
         self.left = TextEntityAlignment.LEFT
         self.arrows = arrows
@@ -168,9 +210,14 @@ class _Drawing:
         regular.set_extended_font_data(family='Arial')
         bold = self.doc.styles.add(STYLE_BOLD, font='arialbd.ttf')
         bold.set_extended_font_data(family='Arial', bold=True)
-        for name, colour in LAYERS:
+        self.layers = layer_names(prefix, mode)
+        split = len(set(self.layers.values())) > 1
+        for role, colour in ROLES:
+            name = self.layers[role]
+            if self.doc.layers.has_entry(name):
+                continue
             layer = self.doc.layers.add(name, color=INK)
-            if colour is not None:
+            if split and colour is not None:
                 layer.true_color = colour
         self.msp = self.doc.modelspace()
         self.x0 = self.y0 = self.x1 = self.y1 = 0.0
@@ -183,6 +230,16 @@ class _Drawing:
     def pt(x, y):
         return (round(x * UNIT, 5), round(-y * UNIT, 5))
 
+    def attribs(self, role, linetype=CONTINUOUS, colour=None):
+        """Layer, colour and linetype of one entity, all stated on it:
+        ``colour`` when given, else the colour of what it is (``role``)."""
+        if colour is None:
+            colour = ROLE_COLOUR[role]
+        attribs = {'layer': self.layers[role], 'color': INK, 'linetype': linetype}
+        if colour is not None:
+            attribs['true_color'] = colour
+        return attribs
+
     def text(self, x, y, text, size, layer=TEXT, bold=False, fit=None, colour=None):
         """One line at baseline ``y``; ``size`` is the screen's font size.
         ``fit``: the widest it may be, in layout units; a longer line is
@@ -190,13 +247,12 @@ class _Drawing:
         value = clean(text, self.arrows)
         if not value:
             return None
-        attribs = {'layer': layer, 'style': STYLE_BOLD if bold else STYLE}
+        attribs = self.attribs(layer, colour=colour)
+        attribs['style'] = STYLE_BOLD if bold else STYLE
         width = string_width(value, BOLD if bold else REGULAR, size)
         if fit and width > fit:
             attribs['width'] = round(max(MIN_WIDTH, fit / width), 3)
             width *= attribs['width']
-        if colour is not None:
-            attribs['true_color'] = colour
         entity = self.msp.add_text(value, height=round(size * CAP * UNIT, 5), dxfattribs=attribs)
         entity.set_placement(self.pt(x, y), align=self.left)
         self._seen(x, y - size)
@@ -204,31 +260,25 @@ class _Drawing:
         return entity
 
     def polyline(self, points, layer, linetype=CONTINUOUS, close=False, colour=None):
-        attribs = {'layer': layer, 'linetype': linetype}
-        if colour is not None:
-            attribs['true_color'] = colour
+        attribs = self.attribs(layer, linetype, colour)
         for x, y in points:
             self._seen(x, y)
         return self.msp.add_lwpolyline([self.pt(x, y) for x, y in points], close=close,
                                        dxfattribs=attribs)
 
-    def rect(self, x0, y0, x1, y1, layer, linetype=CONTINUOUS):
-        return self.polyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], layer, linetype, close=True)
+    def rect(self, x0, y0, x1, y1, layer, linetype=CONTINUOUS, colour=None):
+        return self.polyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], layer, linetype, close=True,
+                             colour=colour)
 
     def line(self, x0, y0, x1, y1, layer, linetype=CONTINUOUS, colour=None):
-        attribs = {'layer': layer, 'linetype': linetype}
-        if colour is not None:
-            attribs['true_color'] = colour
+        attribs = self.attribs(layer, linetype, colour)
         self._seen(x0, y0)
         self._seen(x1, y1)
         return self.msp.add_line(self.pt(x0, y0), self.pt(x1, y1), dxfattribs=attribs)
 
     def arrowhead(self, x, y, layer, colour=None):
-        attribs = {'layer': layer}
-        if colour is not None:
-            attribs['true_color'] = colour
         return self.msp.add_solid([self.pt(x, y), self.pt(x - 6, y - 3.5), self.pt(x - 6, y + 3.5)],
-                                  dxfattribs=attribs)
+                                  dxfattribs=self.attribs(layer, colour=colour))
 
     def data(self):
         pad = 20
@@ -263,7 +313,7 @@ def _title_block(d, project_name, view, digest, printed, width):
     x, ly = 0, y + 106
     for label, classes in entries:
         layer = edge_layer(None, classes or ('confirmed',), None)
-        colour = LAYER_COLOUR[layer]
+        colour = ROLE_COLOUR[layer]
         if 'b' in classes:
             colour = _fade(colour)
         if x and x + 46 + string_width(label, REGULAR, 11) > max(width, 700):
@@ -302,7 +352,7 @@ def _box(d, box):
 
 def _route(d, tab, route, edge):
     layer = edge_layer(tab, route.classes, edge)
-    colour = _fade(LAYER_COLOUR[layer]) if 'b' in route.classes else None
+    colour = _fade(ROLE_COLOUR[layer]) if 'b' in route.classes else None
     d.polyline(route.points, layer, edge_linetype(route.classes), colour=colour)
     d.arrowhead(*route.points[-1], layer, colour=colour)
     if route.key:
@@ -371,13 +421,15 @@ def _warnings(d, view, top):
         y += 4
 
 
-def build_tab_dxf(*, project_name, view, digest, printed, arrows='', empty=False):
+def build_tab_dxf(*, project_name, view, digest, printed, arrows='', empty=False,
+                  prefix=DEFAULT_PREFIX, mode=SPLIT):
     """One tab's drawing as DXF bytes. ``view``: a ``views_wiring.tab_view``
     dict; ``printed``: the stamp, already text; ``arrows='ascii'`` writes
-    "<-" / "->" for the arrows; ``empty``: the project has nothing at all."""
+    "<-" / "->" for the arrows; ``empty``: the project has nothing at all;
+    ``prefix`` / ``mode``: the layer names (``layer_names``)."""
     import ezdxf
 
-    d = _Drawing(ezdxf, arrows)
+    d = _Drawing(ezdxf, arrows, prefix, mode)
     lay = view['layout']
     drawn = bool(lay.boxes) and not view['tab_empty']
     width = lay.width if drawn else 0
