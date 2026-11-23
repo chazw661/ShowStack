@@ -19,7 +19,12 @@ B input links (``edge['b']``) are console links like A's: they follow their
 device's Console connection onto Dante or Analogue/AES, so a device patched
 only on B is on its tab.
 
-Only the nodes an edge reaches are kept (Dante also keeps its devices with
+Comms patch links (``edge['comm']``) are never drawn on these tabs: each tab
+keeps the ones on its transport (Dante: dante; Analogue/AES: the 4-wire
+cables) for its Connections table and Warnings, and they bring no box with
+them. Every comm device is on the Dante tab, with its IPs.
+
+Only the nodes a drawn edge reaches are kept (Dante also keeps its devices with
 no link yet). An I/O device's ``ports`` are counted from the kept edges, so
 it gets only the inputs / outputs box the tab uses.
 
@@ -76,10 +81,13 @@ def _device_end(edge, nodes):
 def unset_devices(graph):
     """I/O devices with no Console connection set, in the graph's order."""
     return [n for n in graph['nodes']
-            if n['kind'] == 'device' and not n.get('console_connection')]
+            if n['kind'] == 'device' and not n.get('console_connection')
+            and n.get('device_kind') != 'comm']
 
 
 def _keep_dante(edge, nodes):
+    if edge.get('comm'):
+        return 'dante' in edge.get('transports', ())
     return is_console_link(edge) and _device_end(edge, nodes).get('console_connection') == 'dante'
 
 
@@ -111,7 +119,8 @@ def _ip_line(node):
 def _ports(edges, device_id):
     # A set: a port that is A of one channel and B of another (or of the
     # same one) is one input on the box, not two.
-    refs = {l.get(f'{end}_ref') or '' for e in edges for l in e.get('links', ())
+    refs = {l.get(f'{end}_ref') or '' for e in edges if not e.get('comm')
+            for l in e.get('links', ())
             for end in ('from', 'to') if device_id in (e['from'], e['to'])}
     return {'inputs': sum(r.startswith('deviceinput:') for r in refs),
             'outputs': sum(r.startswith('deviceoutput:') for r in refs)}
@@ -169,17 +178,19 @@ def graph_view(graph, tab):
             edge = {**edge, 'connection_unset': True}
         edges.append(edge)
 
-    used = {end for e in edges for end in (e['from'], e['to'])}
+    drawn = [e for e in edges if not e.get('comm')]
+    used = {end for e in drawn for end in (e['from'], e['to'])}
     if tab == DANTE:
         used |= {nid for nid, n in nodes.items()
                  if n['kind'] == 'console'
-                 or (n['kind'] == 'device' and n.get('console_connection') == 'dante')}
+                 or (n['kind'] == 'device' and (n.get('console_connection') == 'dante'
+                                                or n.get('device_kind') == 'comm'))}
     out_nodes = []
     for node in graph['nodes']:
         if node['id'] not in used:
             continue
         node = dict(node)
-        if node['kind'] == 'device' and any(node['id'] in (e['from'], e['to']) for e in edges):
+        if node['kind'] == 'device' and any(node['id'] in (e['from'], e['to']) for e in drawn):
             node['ports'] = _ports(edges, node['id'])
         if tab == DANTE and node['kind'] in ('console', 'device'):
             node['lines'] = [_ip_line(node)]

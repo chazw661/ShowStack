@@ -165,7 +165,7 @@ def export_location_pdf(request, location_id):
     summary_headers = ['Module', 'Count']
     summary_data = [
         ['Consoles', str(consoles.count())],
-        ['I/O Devices', str(devices.count())],
+        ['Devices', str(devices.count())],
         ['Amplifiers', str(amps.count())],
         ['System Processors', str(processors.count())],
         ['Comm Belt Packs', str(beltpacks.count())],
@@ -211,7 +211,7 @@ def _all_location_sections(location):
     if devices.exists():
         data = [[d.name, f"{d.input_count}/{d.output_count}",
                  d.primary_ip_address or 'N/A'] for d in devices]
-        sections.append(("I/O Devices",
+        sections.append(("Devices",
                          ['Device Name', 'I/O', 'IP Address'],
                          data,
                          [3 * inch, 1 * inch, 2 * inch]))
@@ -265,7 +265,7 @@ def _single_location_sections(consoles, devices, processors, beltpacks):
         data = [[d.name, str(d.input_count), str(d.output_count),
                  d.primary_ip_address or 'N/A',
                  d.secondary_ip_address or 'N/A'] for d in devices]
-        sections.append(("I/O Devices",
+        sections.append(("Devices",
                          ['Device Name', 'Inputs', 'Outputs', 'Primary IP',
                           'Secondary IP'],
                          data,

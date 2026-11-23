@@ -1,0 +1,116 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+A comm device's page: under its fields, the Comms patch grids (context
+``comm_page``, connections/comm_patch.py). Every row is a text box with a
+datalist; saved text must be exactly one entry. The grids post with the
+device form; DeviceAdmin / CommDeviceForm check and save them. An I/O
+device's page is the stock form with its two port grids.
+{% endcomment %}
+
+{% block extrahead %}
+{{ block.super }}
+{% if comm_page %}
+<style>
+  .comm-patch { margin: 18px 0 8px; }
+  .comm-patch h2 { margin: 0 0 4px; }
+  .comm-patch .help { margin: 0 0 12px; color: #aaa; font-size: 12px; }
+  .comm-patch h3 { margin: 16px 0 6px; font-size: 14px; color: #eee; }
+  .comm-patch table { width: 100%; border-collapse: collapse; }
+  .comm-patch th, .comm-patch td { padding: 5px 8px; text-align: left; vertical-align: top;
+                                   border-bottom: 1px solid var(--ss-border, #444); }
+  .comm-patch th { color: #aaa; font-size: 12px; font-weight: 600; }
+  .comm-patch td.port { white-space: nowrap; font-weight: 600; width: 110px; }
+  .comm-patch td.cable { width: 180px; }
+  .comm-patch input[type="text"] { width: 100%; box-sizing: border-box; }
+  .comm-patch .comm-error { color: #ff8a80; font-size: 12px; margin-top: 3px; }
+  .comm-patch .comm-warning { color: #f5a524; font-size: 12px; margin-top: 3px; }
+  .comm-patch .comm-none { color: #aaa; font-size: 13px; }
+</style>
+{% endif %}
+{% endblock %}
+
+{% block after_field_sets %}
+{{ block.super }}
+{% if comm_page %}
+{% with page=comm_page %}
+<div class="comm-patch" id="comm-patch">
+  <input type="hidden" name="comm-patch-present" value="1">
+  <h2>Comms patch</h2>
+  <p class="help">Pick an entry from each list. Devices on this device's Dante network are listed first; an entry on another network ends with that network's name. Change a port count above and save to add or remove rows.</p>
+  {% for field, entries in page.lists.items %}
+  <datalist id="comm-list-{{ field }}">{% for text in entries %}<option value="{{ text }}"></option>{% endfor %}</datalist>
+  {% endfor %}
+
+  <h3>Dante inputs</h3>
+  {% if page.din %}
+  <table class="comm-din">
+    <thead><tr><th scope="col">Port</th><th scope="col">← From (a device input, or a comm device's Dante Out)</th></tr></thead>
+    <tbody>{% for row in page.din %}
+      <tr><td class="port">{{ row.label }}</td>
+          <td>{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.link label=row.label %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="comm-none">No Dante inputs.</p>{% endif %}
+
+  <h3>Dante outputs</h3>
+  {% if page.dout %}
+  <table class="comm-dout">
+    <thead><tr><th scope="col">Port</th><th scope="col">→ To (a device output, or a comm device's Dante In)</th></tr></thead>
+    <tbody>{% for row in page.dout %}
+      <tr><td class="port">{{ row.label }}</td>
+          <td>{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.link label=row.label %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="comm-none">No Dante outputs.</p>{% endif %}
+
+  <h3>4-wire ports</h3>
+  {% if page.four_wire %}
+  <table class="comm-4w">
+    <thead><tr><th scope="col">Port</th><th scope="col">Send → (a device input)</th><th scope="col">Receive ← (a device output)</th><th scope="col">Cable type</th></tr></thead>
+    <tbody>{% for row in page.four_wire %}
+      <tr><td class="port">{{ row.label }}</td>
+          <td>{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.send label=row.label|add:" send" %}</td>
+          <td>{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.recv label=row.label|add:" receive" %}</td>
+          <td class="cable">{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.cable label=row.label|add:" cable type" maxlength=40 %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="comm-none">No 4-wire ports.</p>{% endif %}
+
+  <h3>2-wire ports</h3>
+  {% if page.two_wire %}
+  <table class="comm-2w">
+    <thead><tr><th scope="col">Port</th><th scope="col">Destination</th><th scope="col">Cable type</th></tr></thead>
+    <tbody>{% for row in page.two_wire %}
+      <tr><td class="port">{{ row.label }}</td>
+          <td>{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.dest label=row.label|add:" destination" maxlength=100 %}</td>
+          <td class="cable">{% include "admin/planner/device/_comm_cell.html" with cell=row.cells.cable label=row.label|add:" cable type" maxlength=40 %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="comm-none">No 2-wire ports.</p>{% endif %}
+</div>
+<script type="application/json" id="comm-far-entries">{{ comm_far_json|safe }}</script>
+<script>
+// Picking an entry on another Dante network says so at once; the saved page
+// and the Wiring Diagram's Warnings panel say it again.
+document.addEventListener('DOMContentLoaded', function () {
+  var el = document.getElementById('comm-far-entries');
+  var far = el ? JSON.parse(el.textContent) : {};
+  document.querySelectorAll('#comm-patch input[data-comm-field]').forEach(function (input) {
+    var networks = far[input.dataset.commField];
+    if (!networks) return;
+    var note = input.parentNode.querySelector('.comm-live-warning');
+    input.addEventListener('input', function () {
+      var network = networks[input.value.trim()];
+      var stored = input.parentNode.querySelector('.comm-warning:not(.comm-live-warning)');
+      if (stored) stored.hidden = true;
+      note.hidden = !network;
+      note.textContent = network
+        ? 'That device is on Dante network “' + network + '”: devices on different networks cannot be routed to each other.'
+        : '';
+    });
+  });
+});
+</script>
+{% endwith %}
+{% endif %}
+{% endblock %}

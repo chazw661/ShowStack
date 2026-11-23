@@ -544,7 +544,7 @@ def _emit_subtable(pending_blocks, caption, headers, data, widths, styles):
 # Section 2 - I/O Devices
 # ===========================================================================
 def _section_devices(project, styles, Device):
-    story = [_section_banner("2", "I/O Devices", styles), Spacer(1, 0.12 * inch)]
+    story = [_section_banner("2", "Devices", styles), Spacer(1, 0.12 * inch)]
     devices = Device.objects.filter(project=project).order_by('name')
 
     if not devices.exists():

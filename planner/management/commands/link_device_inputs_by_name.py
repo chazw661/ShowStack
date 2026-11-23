@@ -95,7 +95,7 @@ def classify(project):
               UNMATCHED: [], STALE: []}
     linked_to = defaultdict(list)   # channel pk -> ports already linked to it
     ports = (DeviceInput.objects
-             .filter(device__project=project)
+             .filter(device__project=project, device__kind='io')
              .select_related('device', 'console_input__console')
              .order_by('device__name', 'device_id', 'input_number'))
     for port in ports:

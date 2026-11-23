@@ -37,6 +37,7 @@ class Source:
     location: str = ''
     ip: str = ''
     duplicate: bool = False
+    network: str = ''   # comm pickers: its Dante network, when not the picking device's
 
     @property
     def key(self):

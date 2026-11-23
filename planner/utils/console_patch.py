@@ -150,7 +150,8 @@ class PortIndex:
     @cached_property
     def inputs(self):
         rows = (DeviceInput.objects
-                .filter(device__project_id=self.project_id, input_number__isnull=False)
+                .filter(device__project_id=self.project_id, device__kind='io',
+                        input_number__isnull=False)
                 .order_by('device__name', 'device_id', 'input_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
                              'console_input__console_id', 'console_input_id', 'pk',
@@ -214,7 +215,8 @@ class PortIndex:
     @cached_property
     def outputs(self):
         rows = (DeviceOutput.objects
-                .filter(device__project_id=self.project_id, output_number__isnull=False)
+                .filter(device__project_id=self.project_id, device__kind='io',
+                        output_number__isnull=False)
                 .order_by('device__name', 'device_id', 'output_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
                              'content_type_id', 'object_id', 'pk'))

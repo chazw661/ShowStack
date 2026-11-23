@@ -3578,7 +3578,7 @@ def ip_address_report(request):
                 ]
             },
             {
-                'name': 'I/O Devices',
+                'name': 'Devices',
                 'model_name': 'device',
                 'app_label': 'planner',
                 'items': [
@@ -5100,7 +5100,7 @@ def export_ip_address_report_csv(request):
     total_ips = console_ips + device_ips + amp_ips + processor_ips + bp_ips
     
     writer.writerow(['Mixing Consoles', console_ips])
-    writer.writerow(['I/O Devices', device_ips])
+    writer.writerow(['Devices', device_ips])
     writer.writerow(['Amplifiers', amp_ips])
     writer.writerow(['System Processors', processor_ips])
     writer.writerow(['COMM Belt Packs (Hardwired)', bp_ips])

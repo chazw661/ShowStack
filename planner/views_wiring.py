@@ -38,6 +38,7 @@ WARNING_TITLES = {
     'ambiguous': 'Matches more than one',
     'drift': 'Label differs from the stream',
     'duplicate': 'Same name, location and IP (rename one to link its outputs)',
+    'dante_network': 'Dante link between different Dante networks (cannot be routed)',
 }
 
 
@@ -66,7 +67,8 @@ def warnings_for(graph, lay):
             'kind': w['kind'],
             'title': WARNING_TITLES.get(w['kind'], w['kind']),
             'edge': f"{labels.get(edge['from'], edge['from'])} → {labels.get(edge['to'], edge['to'])}",
-            'text': _text(w.get('text')),
+            'text': (' / '.join(w['networks']) if w['kind'] == 'dante_network'
+                     else _text(w.get('text'))),
             'candidates': [_candidate(c, labels) for c in w.get('candidates', ())],
         })
     for edge_id in lay.not_drawn:
@@ -125,7 +127,21 @@ def connection_rows(graph, lay):
             'to': _end(to, edge.get('to_ports', ''), slot),
             'cable': cable,
         })
+    # Comms patch links are listed here, not drawn: keyed C1, C2 ...
+    for n, edge in enumerate((e for e in graph['edges'] if e.get('comm')), 1):
+        transport = ', '.join(TRANSPORT_NAMES.get(t, t) for t in edge.get('transports', ()))
+        cable = ' · '.join([transport] + edge.get('cable_types', []))
+        rows.append({
+            'key': f'C{n}',
+            'from': _end(labels_of(graph, edge['from']), edge.get('from_ports', '')),
+            'to': _end(labels_of(graph, edge['to']), edge.get('to_ports', '')),
+            'cable': f'{cable} (comms patch)',
+        })
     return rows
+
+
+def labels_of(graph, node_id):
+    return next((n for n in graph['nodes'] if n['id'] == node_id), {})
 
 
 TAB_EMPTY = {
@@ -162,7 +178,7 @@ def tab_view(project, full, tab, network=True):
         'graph': graph,
         'layout': lay,
         'hidden_network': hidden_network,
-        'tab_empty': bool(full['nodes']) and not graph['nodes'],
+        'tab_empty': bool(full['nodes']) and not graph['nodes'] and not graph['edges'],
         'tab_empty_text': TAB_EMPTY.get(tab, ''),
         'show_unset_legend': any(e.get('connection_unset') for e in edges),
         'show_b_legend': any(e.get('b') for e in edges),

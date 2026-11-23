@@ -97,7 +97,7 @@ from django.contrib.contenttypes.models import ContentType
 from planner.connections import endpoints as ep
 from planner.models import (
     Amp, AmpChannel, AmpLocation, Connection, Console, ConsoleAuxOutput,
-    ConsoleMatrixOutput, ConsoleStereoOutput, Device, DeviceInput, DeviceOutput,
+    CommPort, ConsoleMatrixOutput, ConsoleStereoOutput, Device, DeviceInput, DeviceOutput,
     GalaxyInput, GalaxyOutput, P1Input, P1Output, PACableSchedule, SpeakerArray,
     SystemProcessor,
 )
@@ -273,7 +273,11 @@ class ProjectIndex:
         for d in Device.objects.filter(project_id=pid).select_related('location'):
             self._add(Node(ep.node_id(ep.DEVICE, d.pk), ep.DEVICE, d.name,
                            _location(d.location),
-                           {**_ips(d), 'console_connection': d.console_connection or ''}))
+                           {**_ips(d), 'console_connection': d.console_connection or '',
+                            # only when set, so a project with neither reads as before
+                            **({'device_kind': d.kind} if d.kind != Device.IO else {}),
+                            **({'dante_network': d.dante_network.strip()}
+                               if d.dante_network.strip() else {})}))
         for p in SystemProcessor.objects.filter(project_id=pid).select_related('location'):
             node = self._add(Node(ep.node_id(ep.PROCESSOR, p.pk), ep.PROCESSOR, p.name,
                                   _location(p.location), {'device_type': p.device_type}))
@@ -321,11 +325,19 @@ class ProjectIndex:
                              'console_input__dante_number',
                              'console_input_b_id', 'console_input_b__console_id',
                              'console_input_b__input_ch', 'console_input_b__dante_number',
-                             'console_input_b__source_b'))
+                             'console_input_b__source_b', 'device__kind'))
         position = defaultdict(int)
         for (pk, device_id, name, ci_pk, console_id, input_ch, dante,
-             b_pk, b_console, b_ch, b_dante, source_b) in rows:
+             b_pk, b_console, b_ch, b_dante, source_b, device_kind) in rows:
             position[device_id] += 1
+            if device_kind == Device.COMM:
+                # A comm device's Dante In: an end of its comms links only --
+                # no console link, and never matched by name.
+                self._port(Port(ep.port_ref('deviceinput', pk),
+                                ep.node_id(ep.DEVICE, device_id),
+                                ep.PortLabel('Dante In', position[device_id]),
+                                (name or '').strip(), pk=pk))
+                continue
             port = self._port(Port(ep.port_ref('deviceinput', pk),
                                    ep.node_id(ep.DEVICE, device_id),
                                    ep.io_input_label(position[device_id]),
@@ -349,10 +361,17 @@ class ProjectIndex:
         rows = (DeviceOutput.objects
                 .filter(device__project_id=pid, output_number__isnull=False)
                 .order_by('device_id', 'output_number', 'pk')
-                .values_list('pk', 'device_id', 'signal_name', 'content_type_id', 'object_id'))
+                .values_list('pk', 'device_id', 'signal_name', 'content_type_id', 'object_id',
+                             'device__kind'))
         position = defaultdict(int)
-        for pk, device_id, name, ct_id, obj_id in rows:
+        for pk, device_id, name, ct_id, obj_id, device_kind in rows:
             position[device_id] += 1
+            if device_kind == Device.COMM:
+                self._port(Port(ep.port_ref('deviceoutput', pk),
+                                ep.node_id(ep.DEVICE, device_id),
+                                ep.PortLabel('Dante Out', position[device_id]),
+                                (name or '').strip(), pk=pk))
+                continue
             port = self._port(Port(ep.port_ref('deviceoutput', pk),
                                    ep.node_id(ep.DEVICE, device_id),
                                    ep.io_output_label(position[device_id]),
@@ -432,6 +451,25 @@ class ProjectIndex:
             ref = ep.port_ref(inputs[to_ct], to_id)
             self.processor_links.append((pk, source, self.ports.get(ref), transport))
             self.linked_processor_inputs.add(ref)
+
+        # Stored links: the comms patch (connections/comm_patch.py) ---------
+        for port in CommPort.objects.filter(device__project_id=pid,
+                                            kind=CommPort.FOUR_WIRE):
+            self._port(Port(ep.port_ref('commport', port.pk),
+                            ep.node_id(ep.DEVICE, port.device_id),
+                            ep.PortLabel('4W', port.number), pk=port.pk))
+        comm_cts = {ContentType.objects.get_for_model(model).pk: prefix
+                    for model, prefix in ((DeviceInput, 'deviceinput'),
+                                          (DeviceOutput, 'deviceoutput'),
+                                          (CommPort, 'commport'))}
+        rows = (Connection.objects.filter(project_id=pid, to_ct_id__in=comm_cts)
+                .order_by('pk').values_list('pk', 'from_ct_id', 'from_id', 'to_ct_id', 'to_id',
+                                            'transport', 'cable_type'))
+        self.comm_links = []          # (Connection pk, from Port, to Port, transport, cable type)
+        for pk, from_ct, from_id, to_ct, to_id, transport, cable_type in rows:
+            source = self.ports.get(ep.port_ref(comm_cts.get(from_ct, ''), from_id))
+            target = self.ports.get(ep.port_ref(comm_cts[to_ct], to_id))
+            self.comm_links.append((pk, source, target, transport, cable_type))
 
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)

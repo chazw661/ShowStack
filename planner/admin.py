@@ -60,7 +60,7 @@ from .models import Presenter
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 from .forms import (DeviceInputInlineForm, DeviceInputInlineFormSet, DeviceOutputInlineForm,
                     device_input_b_choices)
-from .forms import DeviceForm, NameOnlyForm
+from .forms import CommDeviceForm, DatalistTextInput, DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 from .models import AudioChecklist
@@ -1580,6 +1580,16 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
 # ———— your inlines here ——————————————————————————————————
 
+def _comm_notes(formset, side):
+    """Each port's read-only comms links ("← Arcadia Dante Out 3"), edited
+    on the comm device's page: one lookup for the whole grid."""
+    from planner.connections import comm_patch
+    device = formset.instance
+    notes = comm_patch.port_notes(device) if device.pk else {}
+    for form in formset.forms:
+        form.comm_notes = notes.get((side, form.instance.pk), []) if form.instance.pk else []
+
+
 class DeviceInputInline(BaseEquipmentInline):
     model = DeviceInput
     form = DeviceInputInlineForm
@@ -1616,6 +1626,7 @@ class DeviceInputInline(BaseEquipmentInline):
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('input_number', idx + 1)
+                _comm_notes(self, 'in')
             
             def get_form_kwargs(self, index):
                 """Pass project_id to each form, and the B picker's options,
@@ -1666,6 +1677,7 @@ class DeviceOutputInline(BaseEquipmentInline):
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('output_number', idx + 1)
+                _comm_notes(self, 'out')
             
             def get_form_kwargs(self, index):
                 """Pass project_id to each form"""
@@ -1681,7 +1693,8 @@ class DeviceOutputInline(BaseEquipmentInline):
 
 class DeviceAdmin(BaseEquipmentAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
-    list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
+    list_display = ['name', 'kind_label', 'dante_network', 'primary_ip_address',
+                    'secondary_ip_address', 'device_actions']
     #list_filter = ['location',]  
     search_fields = ['name'] 
 
@@ -1692,17 +1705,77 @@ class DeviceAdmin(BaseEquipmentAdmin):
         }
 
 
+    COMM_FIELDS = ['name', 'location', 'input_count', 'output_count', 'four_wire_count',
+                   'two_wire_count', 'dante_network', 'primary_ip_address',
+                   'secondary_ip_address']
+
+    @staticmethod
+    def _is_comm(request, obj=None):
+        """A comm device's page, or the "Add comm device" form (?kind=comm)."""
+        if obj is not None:
+            return obj.is_comm
+        return request.GET.get('kind') == Device.COMM
+
+    @admin.display(description='Type', ordering='kind')
+    def kind_label(self, obj):
+        return obj.get_kind_display()
+
     def get_fields(self, request, obj=None):
+        if self._is_comm(request, obj):
+            return list(self.COMM_FIELDS)
         if obj is None:
-            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection', 'input_count', 'output_count']
-        return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection']
-    
+            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection', 'dante_network', 'input_count', 'output_count']
+        return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection', 'dante_network']
+
     def get_form(self, request, obj=None, **kwargs):
-        if obj is None:
+        if self._is_comm(request, obj):
+            kwargs['form'] = CommDeviceForm
+        elif obj is None:
             kwargs['form'] = NameOnlyForm
         else:
             kwargs['form'] = DeviceForm
-        return super().get_form(request, obj, **kwargs)
+        form = super().get_form(request, obj, **kwargs)
+        field = form.base_fields.get('dante_network')
+        project = getattr(request, 'current_project', None)
+        if field is not None and project is not None:
+            # A free-text field offering the networks the project already
+            # names, so "Main 96k" is not typed three ways.
+            field.widget = DatalistTextInput(sorted(
+                {n.strip() for n in Device.objects.filter(project=project)
+                 .exclude(dante_network='').values_list('dante_network', flat=True)},
+                key=str.casefold), attrs={'class': 'vTextField', 'maxlength': 40})
+        return form
+
+    def get_inlines(self, request, obj):
+        # A comm device's ports are patched in its own grids (the Comms
+        # patch section of its page), never in the I/O grids.
+        return [] if self._is_comm(request, obj) else self.inlines
+
+    def render_change_form(self, request, context, add=False, change=False, form_url='',
+                           obj=None):
+        if add and self._is_comm(request):
+            context['title'] = 'New comm device'     # after admin_titles' "New Device"
+        if obj is not None and obj.is_comm:
+            from planner.connections import comm_patch
+            form = context['adminform'].form
+            context['comm_page'] = getattr(form, 'comm_page', None) or comm_patch.build(obj)
+            context['comm_can_edit'] = self.has_change_permission(request, obj)
+            from planner.utils.script_json import script_json
+            context['comm_far_json'] = script_json(context['comm_page'].far)
+        return super().render_change_form(request, context, add, change, form_url, obj)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        device = form.instance
+        if not device.is_comm:
+            return
+        from planner.connections import comm_patch
+        page = getattr(form, 'comm_page', None)
+        if page is not None and page.checked:
+            comm_patch.apply(page)
+            for warning in page.warnings:
+                messages.warning(request, warning)
+        comm_patch.sync_ports(device)
 
     @staticmethod
     def _warn_same_port(request, device):
@@ -1827,6 +1900,8 @@ class DeviceAdmin(BaseEquipmentAdmin):
         # Project assignment
         if not change and hasattr(request, 'current_project'):
             obj.project = request.current_project
+        if not change and self._is_comm(request):
+            obj.kind = Device.COMM
         
         super().save_model(request, obj, form, change)
 

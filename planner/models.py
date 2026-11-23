@@ -216,10 +216,18 @@ class Project(models.Model):
                 primary_ip_address=device.primary_ip_address,
                 secondary_ip_address=device.secondary_ip_address,
                 console_connection=device.console_connection,
+                kind=device.kind,
+                dante_network=device.dante_network,
+                four_wire_count=device.four_wire_count,
+                two_wire_count=device.two_wire_count,
             )
+                for comm_port in device.comm_ports.all():
+                    port_map[('commport', comm_port.pk)] = CommPort.objects.create(
+                        device=new_device, kind=comm_port.kind, number=comm_port.number,
+                        destination=comm_port.destination, cable_type=comm_port.cable_type)
                 # Duplicate Device Inputs
                 for device_input in device.inputs.all():
-                   DeviceInput.objects.create(
+                   port_map[('deviceinput', device_input.pk)] = DeviceInput.objects.create(
                         device=new_device,
                         input_number=device_input.input_number,
                         signal_name=device_input.signal_name,
@@ -1898,17 +1906,40 @@ class Device(models.Model):
         max_length=10, blank=True, default='', choices=CONSOLE_CONNECTION_CHOICES,
         verbose_name="Console connection",
         help_text="How this device connects to the console")
+    # io: a stage box, an interface, a computer -- ports patched to consoles,
+    # processors and amps. comm: an intercom main station (Arcadia ...): its
+    # ``input_count`` / ``output_count`` are its Dante ins / outs, it has
+    # 4-wire and 2-wire ports (``CommPort``), and its patch is edited only on
+    # its own page (``planner/connections/comm_patch.py``). Nothing to do
+    # with COMM Config or the beltpack models.
+    IO, COMM = 'io', 'comm'
+    KIND_CHOICES = [(IO, 'I/O device'), (COMM, 'Comm device')]
+    kind = models.CharField(max_length=4, choices=KIND_CHOICES, default=IO)
+    # Free text ("Main 96k", "Comms 48k"); compared ignoring case and outer
+    # spaces (``network_key``). Blank = not set.
+    dante_network = models.CharField(
+        max_length=40, blank=True, default='', verbose_name="Dante network",
+        help_text='Which Dante network this device is on, e.g. "Main 96k" or "Comms 48k"')
+    four_wire_count = models.PositiveIntegerField(default=0, verbose_name="4-wire ports")
+    two_wire_count = models.PositiveIntegerField(default=0, verbose_name="2-wire ports")
 
-    
     def __str__(self):
         return self.name
-    
+
+    @property
+    def is_comm(self):
+        return self.kind == self.COMM
+
+    @staticmethod
+    def network_key(value):
+        return (value or '').strip().casefold()
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-    
+
     class Meta:
-        verbose_name = "I/O Device"
-        verbose_name_plural = "I/O Devices"
+        verbose_name = "Device"
+        verbose_name_plural = "Devices"
         ordering = ['name']  # or ['id']
 
     
@@ -1936,6 +1967,12 @@ class DeviceInput(models.Model):
         related_name='device_inputs_b',
         verbose_name='Console input (B)',
     )
+    # Comms patch links ending at / starting from this port; deleting the
+    # port deletes them.
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
 
     def save(self, *args, **kwargs):
         # Auto-populate input_number if not set
@@ -1975,6 +2012,9 @@ class DeviceOutput(models.Model):
     # Amp inputs linked to this output; deleting it deletes the links.
     connections_out = GenericRelation('Connection', content_type_field='from_ct',
                                       object_id_field='from_id')
+    # A comm device's Dante Out feeding this output.
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
 
 
 
@@ -2001,6 +2041,41 @@ class DeviceOutput(models.Model):
     class Meta:
         verbose_name = "I/O Device Output"
         verbose_name_plural = "I/O Device Outputs"
+
+
+class CommPort(models.Model):
+    """A 4-wire or 2-wire port on a comm device.
+
+    A 4-wire port's two directions are ``Connection`` rows (send: this port
+    -> an I/O device input; receive: an I/O device output -> this port), both
+    analog. A 2-wire port goes wherever its ``destination`` text says: no
+    device, no Connection."""
+    FOUR_WIRE, TWO_WIRE = '4w', '2w'
+    KIND_CHOICES = [(FOUR_WIRE, '4-wire'), (TWO_WIRE, '2-wire')]
+    KIND_LABEL = {FOUR_WIRE: '4W', TWO_WIRE: '2W'}
+    DEFAULT_4W_CABLE = '4W adapter'
+
+    device = models.ForeignKey(Device, related_name='comm_ports', on_delete=models.CASCADE)
+    kind = models.CharField(max_length=2, choices=KIND_CHOICES)
+    number = models.PositiveIntegerField()
+    destination = models.CharField(max_length=100, blank=True, default='')   # 2-wire only
+    cable_type = models.CharField(max_length=40, blank=True, default='')     # 2-wire only
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
+
+    class Meta:
+        ordering = ['device_id', 'kind', 'number']
+        constraints = [UniqueConstraint(fields=['device', 'kind', 'number'],
+                                        name='comm_port_unique_per_device')]
+
+    @property
+    def label(self):
+        return f'{self.KIND_LABEL[self.kind]} {self.number}'
+
+    def __str__(self):
+        return self.label
     
 
 
@@ -2867,6 +2942,21 @@ class Connection(models.Model):
     most one per input and transport. ``save()`` refuses anything else, an
     end in another project or on a template console, and a transport the
     ends cannot carry. The ends' GenericRelations delete a row with either end.
+
+    A third use is the comms patch (``COMM_LINKS``), always with a comm
+    device (``Device.kind == 'comm'``) at one end and written only by its
+    page (``connections/comm_patch.py``). The row runs the way the signal
+    does, and an I/O device's port is the jack the audio uses, as a console
+    link's is:
+
+      Dante Out n -> an I/O device OUTPUT     (dante; where it comes out)
+      an I/O device INPUT -> Dante In n       (dante; where it goes in)
+      Dante Out n -> another comm device's Dante In   (dante)
+      4W n send -> an I/O device INPUT        (analog; a cable into it)
+      an I/O device OUTPUT -> 4W n receive    (analog; a cable from it)
+
+    A Dante Out and a 4W send go to one place each. A comm device's ports
+    are never an amp's or a processor's source.
     """
     TRANSPORT_CHOICES = [('analog', 'Analog'), ('aes', 'AES'), ('dante', 'Dante'),
                          ('avb', 'AVB'), ('madi', 'MADI'), ('speaker', 'Speaker')]
@@ -2896,6 +2986,15 @@ class Connection(models.Model):
     }
     CONSOLE_SOURCES = {'consoleauxoutput', 'consolematrixoutput', 'consolestereooutput'}
     PROCESSOR_TRANSPORT = {'AVB': 'avb', 'AES': 'aes', 'ANALOG': 'analog'}
+    # (from model, its device's kind, to model, its device's kind) -> transport
+    COMM_PORTS = ('deviceinput', 'deviceoutput', 'commport')
+    COMM_LINKS = {
+        ('deviceoutput', 'comm', 'deviceoutput', 'io'): 'dante',
+        ('deviceinput', 'io', 'deviceinput', 'comm'): 'dante',
+        ('deviceoutput', 'comm', 'deviceinput', 'comm'): 'dante',
+        ('commport', 'comm', 'deviceinput', 'io'): 'analog',
+        ('deviceoutput', 'io', 'commport', 'comm'): 'analog',
+    }
 
     project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='connections')
     from_ct = models.ForeignKey(ContentType, on_delete=models.PROTECT, related_name='+')
@@ -2945,15 +3044,63 @@ class Connection(models.Model):
             transports = {self.PROCESSOR_TRANSPORT.get(row[type_field])}
         return ct.model, row[path], transports
 
+    def _comm_end(self, ct_id, pk):
+        """One end of a comms link: {model, project, device, device_kind,
+        port_kind}, or None when it is not a device or comm port."""
+        from django.core.exceptions import ValidationError
+        ct = ContentType.objects.get_for_id(ct_id) if ct_id else None
+        if ct is None or ct.app_label != 'planner' or ct.model not in self.COMM_PORTS:
+            return None
+        fields = ['device_id', 'device__project_id', 'device__kind']
+        if ct.model == 'commport':
+            fields.append('kind')
+        row = ct.model_class().objects.filter(pk=pk).values(*fields).first()
+        if row is None:
+            raise ValidationError('A connection end does not exist.')
+        return {'model': ct.model, 'project': row['device__project_id'],
+                'device': row['device_id'], 'device_kind': row['device__kind'],
+                'port_kind': row.get('kind', '')}
+
+    def _check_comm(self):
+        """A comms patch link (``COMM_LINKS``), or raise."""
+        from django.core.exceptions import ValidationError
+        source = self._comm_end(self.from_ct_id, self.from_id)
+        to = self._comm_end(self.to_ct_id, self.to_id)
+        if source is None or to is None:
+            raise ValidationError('A connection goes to an amp channel or a processor input, '
+                                  'or is a comms patch.')
+        key = (source['model'], source['device_kind'], to['model'], to['device_kind'])
+        transport = self.COMM_LINKS.get(key)
+        if transport is None or source['device'] == to['device']:
+            raise ValidationError('That is not a comms patch: one end must be a comm '
+                                  "device's port and the other a port it can reach.")
+        if '2w' in (source['port_kind'], to['port_kind']):
+            raise ValidationError('A 2-wire port has a typed destination, not a link.')
+        if source['project'] != self.project_id or to['project'] != self.project_id:
+            raise ValidationError('Both ends of a connection must be in its project.')
+        if self.transport != transport:
+            raise ValidationError(f"{source['model']} → {to['model']} cannot carry "
+                                  f'{self.transport}.')
+        if source['device_kind'] == 'comm':
+            # A Dante Out or a 4W send goes to one place.
+            other = Connection.objects.filter(from_ct_id=self.from_ct_id, from_id=self.from_id)
+            if other.exclude(pk=self.pk).exists():
+                raise ValidationError('That comm port already goes somewhere.')
+        if self.status not in dict(self.STATUS_CHOICES):
+            raise ValidationError(f'Unknown status {self.status!r}.')
+
     def check_ends(self):
         """Raise ValidationError unless this is a link the module allows."""
         from django.core.exceptions import ValidationError
         to = self._end(self.to_ct_id, self.to_id, self.TARGETS)
         if to is None:
-            raise ValidationError('A connection goes to an amp channel or a processor input.')
+            return self._check_comm()
         source = self._end(self.from_ct_id, self.from_id, self.SOURCES)
         if source is None or source[0] not in self.PAIRS[to[0]]:
             raise ValidationError(f'A {to[0]} cannot be fed from that output.')
+        if source[0] == 'deviceoutput' and DeviceOutput.objects.filter(
+                pk=self.from_id, device__kind=Device.COMM).exists():
+            raise ValidationError("A comm device's Dante Out cannot feed an amp or a processor.")
         if source[1] != self.project_id or to[1] != self.project_id:
             raise ValidationError('Both ends of a connection must be in its project.')
         if self.transport not in source[2] or self.transport not in to[2]:

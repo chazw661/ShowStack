@@ -53,9 +53,10 @@ def io_entry(device, position, signal):
 
 def io_sources(project, fields):
     """Every I/O output of the project, once per field in ``fields``, keyed
-    for ordering by device name then position."""
+    for ordering by device name then position. A comm device's outputs are
+    Dante channels, patched on its own page: never listed here."""
     rows = (DeviceOutput.objects
-            .filter(device__project=project, output_number__isnull=False)
+            .filter(device__project=project, device__kind='io', output_number__isnull=False)
             .order_by('device_id', 'output_number', 'pk')
             .values_list('pk', 'device_id', 'device__name', 'signal_name',
                          'device__location__name', 'device__primary_ip_address'))
