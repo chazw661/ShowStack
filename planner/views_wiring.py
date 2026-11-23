@@ -153,8 +153,8 @@ TAB_EMPTY = {
 
 
 def unset_banner(graph, tab):
-    """The Dante and Analog tabs list the I/O devices with no Console
-    connection set, each linking to its device page."""
+    """The Dante and Analog tabs list the I/O devices that have a console
+    link and no Console connection set, each linking to its device page."""
     if tab not in (T.DANTE, T.ANALOG):
         return []
     return [{'name': n['label'],

@@ -326,14 +326,14 @@ class DanteNetworkHeaderTests(CommsShow, TestCase):
         ins = [g for g in lay.groups if g.column == L.IO_IN]
         outs = [g for g in lay.groups if g.column == L.IO_OUT]
         self.assertEqual([g.label for g in ins], ['Comms 48k', 'Main 96k', 'No network set'])
-        self.assertEqual([g.label for g in outs], ['Main 96k', 'No network set'])
+        self.assertEqual([g.label for g in outs], ['Main 96k'])
         self.assertEqual([g.label for g in lay.groups if g.column == L.CONSOLE], [])
         under = {}
         for g in ins:
             under[g.label] = sorted(b.label for b in lay.boxes
                                     if b.column == L.IO_IN and b.group == g.key)
-        self.assertEqual(under, {'Comms 48k': ['Arcadia', 'Arcadia B'], 'Main 96k': ['Rio SL'],
-                                 'No network set': ['Loose box']})
+        self.assertEqual(under, {'Comms 48k': ['Arcadia', 'Arcadia B', 'DVS FOH', 'MK88'],
+                                 'Main 96k': ['Rio SL'], 'No network set': ['Loose box']})
         # headers top to bottom, each above its own boxes and below the last group's
         ys = [g.y for g in ins]
         self.assertEqual(ys, sorted(ys))
@@ -344,8 +344,69 @@ class DanteNetworkHeaderTests(CommsShow, TestCase):
         console = next(b for b in lay.boxes if b.kind == 'console')
         self.assertIsNone(console.group)
         drawing = svg.render(lay)
-        self.assertEqual(drawing.count('class="wd-group"'), 5)
+        self.assertEqual(drawing.count('class="wd-group"'), 4)
         self.assertIn('No network set', drawing)
+
+    def test_every_device_on_dante_is_boxed_with_or_without_a_console_link(self):
+        """Console connection Dante, or a Dante network set, or a comm
+        device: each puts a device on the tab. Nothing else does."""
+        make_device(self.project, 'Net only', network='Main 96k')
+        make_device(self.project, 'Dante only', console_connection='dante')
+        make_device(self.project, 'MADI rack', console_connection='madi')
+        make_device(self.project, 'Unset rack')
+        view, lay = self.dante()
+        devices = {n['label']: n for n in view['nodes'] if n['kind'] == 'device'}
+        self.assertEqual(sorted(devices), ['Arcadia', 'Arcadia B', 'DVS FOH', 'Dante only',
+                                           'MK88', 'Net only', 'Rio SL'])
+        self.assertEqual({name: n['group']['label'] for name, n in devices.items()}, {
+            'Arcadia': 'Comms 48k', 'Arcadia B': 'Comms 48k', 'DVS FOH': 'Comms 48k',
+            'MK88': 'Comms 48k', 'Net only': 'Main 96k', 'Rio SL': 'Main 96k',
+            'Dante only': 'No network set'})
+        for n in devices.values():
+            self.assertEqual(n['lines'], ['No IP'], n['label'])
+        # one box each for the comms-only devices, and no line to any of them
+        ids = {devices[name]['id'] for name in ('MK88', 'DVS FOH', 'Net only', 'Dante only')}
+        boxes = [b for b in lay.boxes if b.node in ids]
+        self.assertEqual(len(boxes), 4)
+        self.assertEqual([r for r in lay.routes if {r.from_node, r.to_node} & ids], [])
+        # comms links are still only listed here, never drawn
+        self.assertEqual(len(lay.routes), len([e for e in view['edges'] if not e.get('comm')]))
+        self.assertTrue(any(e.get('comm') for e in view['edges']))
+
+    def test_a_network_on_a_madi_device_boxes_it_and_keeps_its_links_on_analogue(self):
+        Device.objects.filter(pk=self.rio.pk).update(console_connection='madi')
+        view, lay = self.dante()
+        rio = next(n for n in view['nodes'] if n['label'] == 'Rio SL')
+        self.assertEqual(rio['group']['label'], 'Main 96k')
+        self.assertEqual(lay.routes, [])
+        analog = T.graph_view(project_graph(self.project), T.ANALOG)
+        self.assertEqual(len([e for e in analog['edges'] if T.is_console_link(e)]), 2)
+
+    def test_the_banner_leaves_out_devices_used_only_for_comms(self):
+        """MK88 and DVS FOH are patched to the Arcadia only, with no Console
+        connection: nothing to set. A console link with none set is listed."""
+        graph = project_graph(self.project)
+        self.assertEqual(T.unset_devices(graph), [])
+        wiring = reverse('planner:wiring_diagram')
+        for tab in ('dante', 'analog'):
+            page = self.client.get(f'{wiring}?view={tab}')
+            self.assertEqual(page.context['unset'], [], tab)
+            self.assertNotContains(page, 'no Console connection set')
+        Device.objects.filter(pk=self.rio.pk).update(console_connection='')
+        self.assertEqual([n['label'] for n in T.unset_devices(project_graph(self.project))],
+                         ['Rio SL'])
+        page = self.client.get(f'{wiring}?view=dante')
+        self.assertContains(page, '1 I/O device has no Console connection set')
+        # B only is a console link too
+        DeviceInput.objects.filter(device=self.rio).update(console_input=None)
+        for output in DeviceOutput.objects.filter(device=self.rio):
+            output.console_output = None        # a generic key: no queryset update
+            output.save()
+        self.assertEqual(T.unset_devices(project_graph(self.project)), [])
+        ch = ConsoleInput.objects.get(console=self.foh, input_ch='5')
+        DeviceInput.objects.filter(pk=self.inp(self.mk88, 1).pk).update(console_input_b=ch)
+        self.assertEqual([n['label'] for n in T.unset_devices(project_graph(self.project))],
+                         ['MK88'])
 
     def test_the_same_network_typed_two_ways_is_one_header(self):
         Device.objects.filter(pk=self.rio.pk).update(dante_network=' comms 48K')

@@ -221,4 +221,13 @@ class CommDeviceBrowserTests(CommFixture, StaticLiveServerTestCase):
         self.shot(page, 'dante_networks')
         self.assertEqual(sorted(set(page.locator('svg.wd-svg text.wd-group').all_text_contents())),
                          ['Comms 48k', 'No network set'])
+        # A device patched only to comms is boxed here once, with no line,
+        # and the banner does not ask for its Console connection.
+        for name in ('MK88', 'DVS FOH'):
+            box = page.locator('svg.wd-svg .wd-box').filter(
+                has=page.locator('text', has_text=name))
+            self.assertEqual(box.count(), 1, name)
+            self.assertTrue(box.first.is_visible(), name)
+        self.assertEqual(page.locator('svg.wd-svg .wd-link').count(), 0)
+        self.assertEqual(page.locator('p.wd-banner').count(), 0)
         self.assertEqual(self.errors, [])

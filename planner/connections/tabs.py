@@ -6,9 +6,10 @@ lay out on its own. Each tab is laid out independently, so a later PDF can
 draw each as its own section.
 
   overview   everything
-  dante      every console, every I/O device whose Console connection is
-             Dante, and their console links. Boxes carry the IP Address
-             Manager's primary / secondary IP (``lines``).
+  dante      every console, every device on Dante (``on_dante``: its
+             Console connection is Dante, or it has a Dante network set, or
+             it is a comm device) and the Dante console links. Boxes carry
+             the IP Address Manager's primary / secondary IP (``lines``).
   analog     analog and AES feeds (I/O or console -> processor -> amp, I/O
              -> amp, their unlinked feeds and "?" matches) and every console
              link that is not Dante. A console link whose device has no
@@ -29,11 +30,13 @@ only on B is on its tab.
 Comms patch links (``edge['comm']``) are drawn on the Comms tab only: each other tab
 keeps the ones on its transport (Dante: dante; Analogue/AES: the 4-wire
 cables) for its Connections table and Warnings, and they bring no box with
-them. Every comm device is on the Dante tab, with its IPs.
+them. A device patched only to comms is still boxed on the Dante tab when it
+is on Dante (``on_dante``), under its network, with its IPs and no line.
 
-Only the nodes a drawn edge reaches are kept (Dante also keeps its devices with
-no link yet). An I/O device's ``ports`` are counted from the kept edges, so
-it gets only the inputs / outputs box the tab uses.
+Only the nodes a drawn edge reaches are kept (Dante also keeps every device
+on Dante, linked or not). An I/O device's ``ports`` are counted from the drawn edges, so
+it gets only the inputs / outputs box the tab uses; one with no drawn link
+is a single box, in the Device inputs column.
 
 ``without_network(graph)`` is the Overview with "Show network feeds" off:
 no AVB / Dante network edges. An amp or processor slot one fed stays on its
@@ -89,11 +92,24 @@ def _device_end(edge, nodes):
     return {}
 
 
+def on_dante(node):
+    """A device the Dante tab boxes: its Console connection is Dante, or it
+    has a Dante network set, or it is a comm device."""
+    return node['kind'] == 'device' and (node.get('console_connection') == 'dante'
+                                         or bool(node.get('dante_network'))
+                                         or node.get('device_kind') == 'comm')
+
+
 def unset_devices(graph):
-    """I/O devices with no Console connection set, in the graph's order."""
+    """I/O devices with a console link (A or B) and no Console connection
+    set, in the graph's order. A device with no console link -- one used
+    only for comms, or not patched yet -- has nothing the setting would
+    place, so it is not listed."""
+    linked = {end for e in graph['edges'] if not e.get('comm') and is_console_link(e)
+              for end in (e['from'], e['to'])}
     return [n for n in graph['nodes']
             if n['kind'] == 'device' and not n.get('console_connection')
-            and n.get('device_kind') != 'comm']
+            and n.get('device_kind') != 'comm' and n['id'] in linked]
 
 
 def _keep_dante(edge, nodes):
@@ -215,16 +231,14 @@ def graph_view(graph, tab):
     drawn = [e for e in edges if not e.get('comm')]
     used = {end for e in drawn for end in (e['from'], e['to'])}
     if tab == DANTE:
-        used |= {nid for nid, n in nodes.items()
-                 if n['kind'] == 'console'
-                 or (n['kind'] == 'device' and (n.get('console_connection') == 'dante'
-                                                or n.get('device_kind') == 'comm'))}
+        used |= {nid for nid, n in nodes.items() if n['kind'] == 'console' or on_dante(n)}
     out_nodes = []
     for node in graph['nodes']:
         if node['id'] not in used:
             continue
         node = dict(node)
-        if node['kind'] == 'device' and any(node['id'] in (e['from'], e['to']) for e in drawn):
+        if node['kind'] == 'device':
+            # Counted from the drawn links: a device with none is one box.
             node['ports'] = _ports(edges, node['id'])
         if tab == DANTE and node['kind'] in ('console', 'device'):
             node['lines'] = [_ip_line(node)]
