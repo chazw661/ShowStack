@@ -145,6 +145,18 @@ class SidebarContentsByRole(SidebarBase):
         self.assertEqual('IP Address Manager', labels['IPAddressManager'])
         self.assertNotIn('ShowTemplate', labels)
 
+    def test_the_amp_pdf_is_titled_like_the_sidebar_row(self):
+        import io
+
+        from PyPDF2 import PdfReader
+
+        from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
+        reader = PdfReader(io.BytesIO(export_all_amps_pdf(self.project).content))
+        self.assertEqual('Amplifiers', reader.metadata.title)
+        text = reader.pages[0].extract_text()
+        self.assertIn('Amplifiers', text)
+        self.assertNotIn('Amplifier Assignments', text)
+
 
 class HiddenRowsKeepTheirPages(SidebarBase):
     """The sidebar narrows what is listed, never what may be opened."""
