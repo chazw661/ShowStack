@@ -1426,7 +1426,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         self.message_user(
             request,
             format_html(
-                "Saved '{}' to <a href=\"{}\">My templates</a> as '{}'.",
+                "Saved '{}' to <a href=\"{}\">your templates</a> as '{}'.",
                 console.name,
                 reverse('admin:planner_showtemplate_change', args=[template.pk]),
                 template.name,
@@ -1445,6 +1445,11 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         # depending on that redirect staying.
         extra_context['template_library_url'] = reverse(
             'admin:console_template_library'
+        )
+        # Templates have no sidebar row; this button and the one on the Load
+        # template page are the way to the list (rename, notes, delete).
+        extra_context['manage_templates_url'] = reverse(
+            'admin:planner_showtemplate_changelist'
         )
         return super().changelist_view(request, extra_context=extra_context)
     
@@ -7360,7 +7365,7 @@ class AmplifierAssignmentInline(ProjectRoleInlineMixin, admin.TabularInline):
         'calculated_current_per_unit', 'calculated_total_current', 'delete_link'
     ]
     readonly_fields = ['calculated_current_per_unit', 'calculated_total_current', 'delete_link']
-    verbose_name_plural = ('Amplifiers in Power Plan — current is an estimate from '
+    verbose_name_plural = ('Power Plan Amps — current is an estimate from '
                            'manufacturer watts at the phase-to-neutral voltage, including '
                            'the plan\'s transient headroom')
     autocomplete_fields = ['amplifier']

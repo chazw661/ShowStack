@@ -339,9 +339,8 @@ class SidebarTests(MicPlanBase):
             with self.subTest(user=user.username):
                 self.use(user)
                 resp = self.client.get(reverse('admin:planner_console_changelist'))
-                planner = next(a for a in resp.context['available_apps']
-                               if a['app_label'] == 'planner')
-                row = next(m for m in planner['models'] if m['object_name'] == 'ShowflowImport')
+                row = next(m for section in resp.context['available_apps']
+                           for m in section['models'] if m['object_name'] == 'ShowflowImport')
                 self.assertEqual('Mic Planner', str(row['name']))
                 self.assertEqual(reverse('planner:mic_plan'), row['admin_url'])
                 self.assertIsNone(row['add_url'])

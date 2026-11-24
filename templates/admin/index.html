@@ -119,6 +119,7 @@ below still names the project.
   .ss-mp-sent { color: #4a9eff; }
   .ss-mp-planned { display: block; color: var(--purple); font-size: 0.68rem; }
   .ss-card.power { border-left: 3px solid var(--red); }
+  .ss-card.wiring { border-left: 3px solid var(--teal); }
   .ss-card.check { border-left: 3px solid var(--accent); }
   .ss-card.net { border-left: 3px solid #6b7280; }
   .ss-card.cca { border-left: 3px solid var(--teal); }
@@ -304,6 +305,14 @@ below still names the project.
       <div class="ss-card-title">Mic Tracker</div>
       <div id="mic-days-list" style="font-size:0.78rem;color:#9090b0;">
         <span style="color:#5555aa;">Loading...</span>
+      </div>
+    </a>
+    {# Static on purpose: no counts, so the dashboard never builds the connection graph. #}
+    <a class="ss-card wiring" href="{% url 'planner:wiring_diagram' %}?view=overview">
+      <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="6" height="5" rx="1"/><rect x="2" y="15" width="6" height="5" rx="1"/><rect x="16" y="9.5" width="6" height="5" rx="1"/><path d="M8 6.5h4v5.5h4"/><path d="M8 17.5h4V12"/></svg><span class="ss-card-label">Signal flow</span></div>
+      <div class="ss-card-title">Wiring Diagram</div>
+      <div class="ss-card-metrics">
+        <div class="ss-metric"><span class="ss-metric-val">Overview</span><span class="ss-metric-label">View · PDF · DXF</span></div>
       </div>
     </a>
     <a class="ss-card power" href="{% url 'planner:power_distribution_calculator' %}">

@@ -56,8 +56,8 @@ class SidebarTests(MicPlanBase):
     def models(self, user):
         self.use(user)
         resp = self.client.get(reverse('admin:planner_console_changelist'))
-        app = next(a for a in resp.context['available_apps'] if a['app_label'] == 'planner')
-        return app['models']
+        section = next(a for a in resp.context['available_apps'] if a['app_label'] == 'mics')
+        return section['models']
 
     def test_mic_planner_sits_just_above_mic_tracker(self):
         for user in (self.owner, self.viewer):
