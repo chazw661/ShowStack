@@ -139,6 +139,9 @@ class SidebarContentsByRole(SidebarBase):
     def test_the_names_people_read(self):
         labels = self.labels('superuser')
         self.assertEqual('Amplifiers', labels['Amp'])
+        # One amp: "Add Amplifier", "The Amplifier ... was changed".
+        from planner.models import Amp
+        self.assertEqual('Amplifier', str(Amp._meta.verbose_name))
         self.assertEqual('Power Plan Amps', labels['AmplifierAssignment'])
         self.assertEqual('Comm Configurations', labels['CommConfig'])
         self.assertEqual('Mic Planner', labels['ShowflowImport'])

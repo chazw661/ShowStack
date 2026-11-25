@@ -2376,7 +2376,7 @@ class Amp(models.Model):
     sc32_ch16 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch16")
     
     class Meta:
-        verbose_name = "Amplifier Assignment"
+        verbose_name = "Amplifier"
         verbose_name_plural = "Amplifiers"
         ordering = ['ip_address']
 

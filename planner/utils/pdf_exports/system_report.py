@@ -1145,7 +1145,7 @@ def _power_plan(plan, styles, excluded, heading=True):
                    if plan.other_electronics_watts else ''), styles['meta']),
         ]
     else:
-        story.append(_keep(intro + [Paragraph("No amplifier assignments.", styles['empty'])]))
+        story.append(_keep(intro + [Paragraph("No amplifiers.", styles['empty'])]))
     for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
                           key=str):
         story.append(Paragraph(f"{escape(str(profile))}: {escape(profile.figures_status)}.",
