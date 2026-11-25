@@ -61,8 +61,8 @@ class SidebarAndLinksTests(SingleEntryBase):
         self.use(user)
         resp = self.client.get(reverse('admin:planner_console_changelist'))
         self.assertEqual(200, resp.status_code)
-        planner = next(a for a in resp.context['available_apps'] if a['app_label'] == 'planner')
-        return next(m for m in planner['models'] if m['object_name'] == 'PowerDistributionPlan')
+        return next(m for section in resp.context['available_apps']
+                    for m in section['models'] if m['object_name'] == 'PowerDistributionPlan')
 
     def test_sidebar_entry_opens_the_calculator_for_every_user(self):
         for user in (self.user_a, self.editor, self.viewer, self.superuser):

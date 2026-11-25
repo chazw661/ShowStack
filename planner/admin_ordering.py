@@ -1,18 +1,106 @@
 # planner/admin_ordering.py
-# Updated to hide child models for viewers
-from django.contrib import admin
+"""The admin sidebar: which rows, in which sections, for whom.
+
+Django builds one sidebar block per app. ShowStack shows sections that follow
+the job instead (Project, System, Comms, ...), so `ordered_get_app_list`
+takes whatever the admin site says this user may see and deals it into
+`SECTIONS`, in the order written there.
+
+The sidebar only ever narrows: a row appears when it is in a section AND the
+model admin already lets this user see it. Hiding a row here changes no
+permission -- the page still opens at its URL, and pickers that read the
+model still work.
+
+Adding an admin-registered model? Put its name in a section or in
+`NOT_IN_SIDEBAR`. `planner.tests.test_sidebar` fails until it is in one.
+"""
 from django.urls import reverse
-from planner.tenancy import can_access_project, can_edit_project
+
 from planner.admin_site import showstack_admin_site
+from planner.tenancy import can_access_project, can_edit_project
 
 # Store the original get_app_list from showstack_admin_site
 original_get_app_list = showstack_admin_site.get_app_list
 
+# (key, heading, rows in order). Names are lower-cased model class names,
+# plus the pages in `_pages`. The key becomes the block's `app-<key>` class.
+SECTIONS = [
+    ('project', 'Project', [
+        'project', 'location', 'projectmember', 'invitation', 'crew',
+    ]),
+    ('system', 'System', [
+        'console', 'device', 'ipaddressmanager', 'systemprocessor',
+        'soundvisionprediction', 'speakerarray', 'speakercabinet',
+        'amp', 'pacableschedule',
+        'powerdistributionplan', 'amplifierassignment',
+        'wiringdiagram',
+    ]),
+    ('comms', 'Comms', ['commbeltpack', 'commconfig']),
+    ('mics', 'Mics', ['showflowimport', 'showday']),
+    ('show', 'Show', ['audiochecklist', 'multitracksession']),
+    ('libraries', 'Libraries', [
+        'sourcehardwareoption', 'cabinetmodel', 'amplifierprofile',
+        'commdevicemodel',
+    ]),
+    ('admin', 'Admin', ['user', 'group', 'userprofile']),
+]
+
+# Rows that fold under a parent row (the arrow in the sidebar). Each child
+# row carries its parent's name as `sidebar_parent`; templates/admin/
+# app_list.html writes it out and the script in base_site.html reads it. So
+# the grouping follows the model, never the wording of a link.
+GROUPS = {
+    'soundvisionprediction': ['speakerarray', 'speakercabinet'],
+    'powerdistributionplan': ['amplifierassignment'],
+}
+PARENT_OF = {child: parent for parent, children in GROUPS.items() for child in children}
+
+# Sidebar rows for superusers only. The catalogues are shared by every
+# account and only a superuser can edit them; everyone else meets their
+# figures where they are used (the cabinet pickers, the power plan's per-amp
+# current). View permission is untouched: the lists still open at their URLs.
+SUPERUSER_ONLY = {
+    'cabinetmodel', 'amplifierprofile', 'commdevicemodel',
+    'user', 'group', 'userprofile',
+}
+
+# Child rows a viewer of the current project has no use for.
+HIDDEN_FROM_VIEWERS = {'speakerarray', 'speakercabinet', 'amplifierassignment'}
+
+# Registered in the admin, deliberately not in the sidebar: reached from a
+# parent page or a button, or retired.
+NOT_IN_SIDEBAR = {
+    # Reached from their parent's page.
+    'ampmodel', 'pazone', 'p1processor', 'galaxyprocessor',
+    'commposition', 'commcrewname', 'commchannel',
+    'micsession', 'micassignment', 'micgroup', 'presenter', 'micshowinfo',
+    # "Manage templates" on the Consoles list and the Load template page.
+    'showtemplate',
+    # Managed inside the Multitrack module (issue #17).
+    'multitracktemplate',
+    # Audit rows written by the console CSV import (issue #6).
+    'consoleimport',
+    # Network Health Monitor, scrapped: the URLs still open.
+    'monitorsession', 'discovereddevice', 'pollresult', 'deviceevent',
+    'projectsnmpconfig', 'switchportsnapshot',
+}
+
+
+def _pages():
+    """Sidebar rows that are pages of the current project, not models."""
+    return [
+        {'name': 'IP Address Manager', 'object_name': 'IPAddressManager',
+         'admin_url': reverse('planner:ip_address_report'), 'add_url': None,
+         'view_only': True, 'perms': {'view': True}},
+        {'name': 'Wiring Diagram', 'object_name': 'WiringDiagram',
+         'admin_url': reverse('planner:wiring_diagram'), 'add_url': None,
+         'view_only': True, 'perms': {'view': True}},
+    ]
+
 
 def ordered_get_app_list(request, app_label=None):
     app_list = original_get_app_list(request, app_label)
-    app_list = [app for app in app_list if app['app_label'] != 'admin_interface']
-    
+
     # A viewer on the CURRENT project: they can open it but not change it.
     # The role is per project; being a viewer somewhere else, or an editor
     # somewhere else, says nothing about the project in hand.
@@ -21,183 +109,63 @@ def ordered_get_app_list(request, app_label=None):
         can_access_project(request.user, project)
         and not can_edit_project(request.user, project)
     )
+    is_superuser = request.user.is_superuser
 
-    # Define child models that should be hidden from viewers
-    child_models = {
-        'pafanout',           # Child of PA Cable Entries
-        'commposition',       # Child of Comm Devices
-        'commcrewname',       # Child of Comm Devices
-        'commchannel',        # Child of Comm Devices
-        'commdevicemodel',    # Hardware catalogue; superuser-only anyway
-        'micsession',         # Child of Show Mic Tracker
-        'micassignment',      # Child of Show Mic Tracker
-        'presenter',          # Child of Show Mic Tracker
-        'micshowinfo',        # Child of Show Mic Tracker
-        'speakerarray',       # Child of Soundvision Predictions
-        'speakercabinet',     # Child of Soundvision Predictions
-        'amplifierassignment',# Child of Power Distribution Plans
-        'ampmodel',           # Child of Amplifier Assignments 
-        'amplifierprofile',   # Child of Amplifier Profiles
-        'cabinetmodel',       # Shared catalogue; superuser-edited
-        'p1input',            # Child of P1 Processor
-        'p1output',           # Child of P1 Processor
-        'galaxyinput',        # Child of Galaxy Processor
-        'galaxyoutput',       # Child of Galaxy Processor
-        'pollresult',         # Child of MonitorSession/DiscoveredDevice
-        'deviceevent',        # Child of MonitorSession/DiscoveredDevice
-        'switchportsnapshot', # Child of MonitorSession/DiscoveredDevice
-
-    }
-
-    # Models to always hide from sidebar (accessible via direct URL)
-    always_hidden = {
-        'ampmodel',
-        'micgroup',
-        # Network Health Monitor — module scrapped (see PROJECT.md "v1.0 Network
-        # Health Monitor (scrapped)"). Models remain registered so historical
-        # /admin/planner/<model>/ URLs still work, but they are hidden from the
-        # sidebar.
-        'monitorsession',
-        'discovereddevice',
-        'pollresult',
-        'deviceevent',
-        'projectsnmpconfig',
-        'switchportsnapshot',
-        # ConsoleImport audit history — hidden from sidebar (issue #6).
-        # The Phase 2 CSV-import flow still writes rows here for audit; only
-        # the admin sidebar link is suppressed. Re-enable by removing from this
-        # set when the changelist 500 is investigated.
-        'consoleimport',
-        # MultitrackTemplate — hidden from sidebar (issue #17). Templates are
-        # already managed from within the Multitrack module UI, so the duplicate
-        # sidebar link was just noise.
-        'multitracktemplate',
-    }
-    
-    # Define the correct order with proper groupings
-    order_map = {
-        # Authentication & Authorization (0)
-        'user': 0,
-        'group': 0.5,
-        
-        # User/Project Management (1-4)
-        'userprofile': 1,
-        'projectmember': 2,
-        'crew': 2.3,           # Phase 6 (crewmember/crewprojectadd hidden — #12; members managed via Crew inline)
-        'invitation': 3,
-        'project': 4,
-        
-        # Main Equipment (5-8)
-        'location': 5,
-        'console': 6,
-        'showtemplate': 6.2,   # "My templates" (per-module templates)
-        'sourcehardwareoption': 6.5,
-        'device': 7,
-        'amp': 8,
-        'ampmodel': 8.5,
-        
-        # System Processors (9)
-        'systemprocessor': 9,
-        
-        # PA Cable System (10-11)
-        'pacableschedule': 10,
-        'wiringdiagram': 10.5,   # a page, not a model: added below
-        'pafanout': 11,
-        
-        # Communications (12-15)
-        'commbeltpack': 12,
-        'commconfig': 12.5,
-        'commposition': 13,
-        'commcrewname': 14,
-        'commchannel': 15,
-        'commdevicemodel': 15.5,   # hardware catalogue behind the Model dropdown
-
-        # Mic Planner, then Show Mic Tracker (16-20): plan, then track
-        'showflowimport': 15.9,   # Mic Planner: opens the review page
-        'showday': 16,
-        'micsession': 17,
-        'micassignment': 18,
-        'presenter': 19,
-        'micshowinfo': 20,
-        
-        # PA Zones (21)
-        'pazone': 21,
-        
-        # Soundvision (22-24)
-        'soundvisionprediction': 22,
-        'speakerarray': 23,
-        'speakercabinet': 24,
-        
-        # Amplifiers (25-27)
-        'powerdistributionplan': 25,
-        'amplifierassignment': 25.5,
-        'amplifierprofile': 25.6,
-        'cabinetmodel': 25.7,
-
-    
-        
-        # Standalone Models (28-29)
-        'audiochecklist': 29,
-        
-        # P1 & Galaxy Processors (30-35)
-        'p1processor': 30,
-        'p1input': 31,
-        'p1output': 32,
-        'galaxyprocessor': 33,
-        'galaxyinput': 34,
-        'galaxyoutput': 35,
-
-        # Network Health Monitor (36-41)
-        'monitorsession': 36,
-        'discovereddevice': 37,
-        'pollresult': 38,
-        'deviceevent': 39,
-        'projectsnmpconfig': 40,
-        'switchportsnapshot': 41,
-
-        # Multitrack Session Builder (50 — bottom of sidebar)
-        'multitracksession': 50,
-        'multitracktemplate': 51,        # NEW — Phase 3
-    }
-    
+    rows = {}
     for app in app_list:
-        if app['app_label'] == 'planner':
-            # Filter out always-hidden models for everyone, and child models for viewers
-            filtered_models = []
-            for model in app['models']:
-                model_name = model['object_name'].lower()
-                if model_name in always_hidden:
-                    continue  # Always hide these
-                if is_viewer and model_name in child_models:
-                    continue  # Hide children for viewers
-                if model_name == 'powerdistributionplan':
-                    # The sidebar opens the project's power plan page (the
-                    # one with Regenerate), not the admin list; superusers
-                    # reach the list at its URL.
-                    model['admin_url'] = reverse('planner:power_distribution_calculator')
-                    model['add_url'] = None
-                if model_name == 'showflowimport':
-                    # "Mic Planner" opens the import + review page; the admin
-                    # list itself only redirects there. Named here, not by
-                    # verbose_name_plural, so the rename needs no migration.
-                    model['name'] = 'Mic Planner'
-                    model['admin_url'] = reverse('planner:mic_plan')
-                    model['add_url'] = None
-                filtered_models.append(model)
-            
-            # Wiring Diagram is a read-only page, not a model, so it gets a
-            # row of its own, for every role that can open the project.
-            filtered_models.append({
-                'name': 'Wiring Diagram', 'object_name': 'WiringDiagram',
-                'admin_url': reverse('planner:wiring_diagram'), 'add_url': None,
-                'view_only': True, 'perms': {'view': True},
+        for model in app['models']:
+            rows[model['object_name'].lower()] = model
+    if any(app['app_label'] == 'planner' for app in app_list):
+        # The pages are for every role that can open the project.
+        for page in _pages():
+            rows[page['object_name'].lower()] = page
+
+    plan = rows.get('powerdistributionplan')
+    if plan:
+        # The sidebar opens the project's power plan page (the one with
+        # Regenerate), not the admin list; superusers reach the list at its
+        # URL.
+        plan['admin_url'] = reverse('planner:power_distribution_calculator')
+        plan['add_url'] = None
+    mic_planner = rows.get('showflowimport')
+    if mic_planner:
+        # "Mic Planner" opens the import + review page; the admin list itself
+        # only redirects there. Named here, not by verbose_name_plural, so
+        # the model keeps its name.
+        mic_planner['name'] = 'Mic Planner'
+        mic_planner['admin_url'] = reverse('planner:mic_plan')
+        mic_planner['add_url'] = None
+
+    def shown(name):
+        return (
+            name in rows
+            and (is_superuser or name not in SUPERUSER_ONLY)
+            and not (is_viewer and name in HIDDEN_FROM_VIEWERS)
+        )
+
+    sections = []
+    for key, heading, names in SECTIONS:
+        models = []
+        for name in names:
+            if not shown(name):
+                continue
+            row = rows[name]
+            parent = PARENT_OF.get(name)
+            # A child folds only under a parent that is itself listed.
+            row['sidebar_parent'] = parent if parent and shown(parent) else ''
+            models.append(row)
+        if models:
+            sections.append({
+                'name': heading,
+                'app_label': key,
+                # A section has no page of its own; its heading is plain
+                # text (templates/admin/app_list.html).
+                'app_url': '',
+                'has_module_perms': True,
+                'models': models,
             })
-            app['models'] = filtered_models
-            
-            # Sort remaining models
-            app['models'].sort(key=lambda x: order_map.get(x['object_name'].lower(), 999))
-            
-    return app_list
+    return sections
+
 
 # Apply the monkey patch
 showstack_admin_site.get_app_list = ordered_get_app_list

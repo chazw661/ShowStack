@@ -83,16 +83,14 @@ class WiringViewTests(WiringShow, TestCase):
         self.client.force_login(self.user)
         self.assertEqual(self.client.post(self.url).status_code, 405)
 
-    def test_the_sidebar_lists_it_for_a_viewer_after_pa_cables(self):
+    def test_the_sidebar_lists_it_for_a_viewer_at_the_end_of_system(self):
         viewer = self.member('vi', 'viewer')
         self.get(viewer)
         response = self.client.get(reverse('admin:index'))
         self.assertContains(response, f'href="{self.url}"')
         models = [m['object_name'] for app in response.context['available_apps']
-                  if app['app_label'] == 'planner' for m in app['models']]
-        self.assertIn('WiringDiagram', models)
-        if 'PACableSchedule' in models:
-            self.assertEqual(models.index('WiringDiagram'), models.index('PACableSchedule') + 1)
+                  if app['app_label'] == 'system' for m in app['models']]
+        self.assertEqual(models[-1], 'WiringDiagram')
 
     # -- what it shows -------------------------------------------------------------
 

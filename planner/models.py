@@ -2377,7 +2377,7 @@ class Amp(models.Model):
     
     class Meta:
         verbose_name = "Amplifier Assignment"
-        verbose_name_plural = "Amplifier Assignments"  # PARENT - Standalone
+        verbose_name_plural = "Amplifiers"
         ordering = ['ip_address']
 
     def save(self, *args, **kwargs):
@@ -5640,7 +5640,7 @@ class AmplifierAssignment(models.Model):
     
     class Meta:
         verbose_name = "Amplifiers in Power Plan"
-        verbose_name_plural = "Amplifiers in Power Plan" # PARENT
+        verbose_name_plural = "Power Plan Amps"
         ordering = ['id']  # SAFE DEFAULT - replace with your fields like 'zone', 'position', etc.
 
         
@@ -6472,7 +6472,7 @@ class CommConfig(models.Model):
 
     class Meta:
         verbose_name = "COMM Configuration"
-        verbose_name_plural = "COMM Configurations"
+        verbose_name_plural = "Comm Configurations"
         ordering = ['-modified_at']
 
     def __str__(self):

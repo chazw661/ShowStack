@@ -7,7 +7,7 @@
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
     &rsaquo; <a href="{% url 'admin:app_list' app_label='planner' %}">{% trans 'Planner' %}</a>
-    &rsaquo; Amplifier Assignments
+    &rsaquo; Amplifiers
 </div>
 {% endblock %}
 
@@ -903,7 +903,7 @@
 
 {% block content_title %}
 <div class="rack-toolbar">
-    <h1>Amplifier Assignments{% if request.current_project %} &mdash; {{ request.current_project.name }}{% endif %}</h1>
+    <h1>Amplifiers{% if request.current_project %} &mdash; {{ request.current_project.name }}{% endif %}</h1>
     {% if request.current_project %}
     <div class="rack-actions">
         <a class="rack-btn primary" href="{% url 'planner:all_amps_pdf_export' %}">Export to PDF</a>

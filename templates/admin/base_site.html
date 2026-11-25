@@ -550,112 +550,75 @@ document.addEventListener('DOMContentLoaded', function () {
 <!-- Collapsible Sidebar Menu -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Define parent-child relationships
-    const menuStructure = {
-       
-    'Mic Tracker': ['Mic Sessions', 'Mic Assignments', 'Presenters', 'Mic Show Information'],
-        'Soundvision Predictions': ['Speaker Arrays', 'Speaker Cabinets'],
-        'Power Distribution Plans': ['Amplifiers in Power Plan', 'Amplifier Profiles']
-    };
-    
-    // Find the sidebar
+    // Which rows fold under which is decided on the server
+    // (planner/admin_ordering.py GROUPS): a child row carries
+    // data-sidebar-parent="<model>", and the parent is the row with the
+    // class model-<model>. Nothing here reads a link's text, so renaming a
+    // model in the sidebar cannot break a group.
     const sidebar = document.getElementById('nav-sidebar');
     if (!sidebar) return;
-    
-    // Get saved state from localStorage
-    const savedState = JSON.parse(localStorage.getItem('sidebarState') || '{}');
-    
-    // Get all rows in the sidebar
-    const allRows = sidebar.querySelectorAll('tr');
-    
-    // Build a map of link text to row(s) - handle duplicates by storing arrays
-    const rowMap = {};
-    allRows.forEach(row => {
-        const link = row.querySelector('a:not(.addlink)');
-        if (link) {
-            const text = link.textContent.trim().toLowerCase();
-            if (!rowMap[text]) {
-                rowMap[text] = [];
-            }
-            rowMap[text].push({ row: row, link: link });
-        }
+
+    // Open/closed per parent, keyed by model name. Before the groups were
+    // matched by model the key was the parent's link text; read those once so
+    // nobody's open group snaps shut.
+    const OLD_KEYS = {
+        soundvisionprediction: 'Soundvision Predictions',
+        powerdistributionplan: 'Power Distribution Plans'
+    };
+    let savedState = {};
+    try {
+        savedState = JSON.parse(localStorage.getItem('sidebarState') || '{}') || {};
+    } catch (e) { savedState = {}; }
+
+    const groups = {};
+    sidebar.querySelectorAll('tr[data-sidebar-parent]').forEach(row => {
+        const parent = row.getAttribute('data-sidebar-parent');
+        (groups[parent] = groups[parent] || []).push(row);
     });
-    
-    // Process each parent
-    Object.entries(menuStructure).forEach(([parent, children]) => {
-        const parentLower = parent.toLowerCase();
-        const parentEntries = rowMap[parentLower];
-        
-        if (!parentEntries || parentEntries.length === 0) return;
-        
-        // Use the first matching parent
-        const parentRow = parentEntries[0].row;
-        const parentLink = parentEntries[0].link;
-        
-        // Collect ALL matching child rows
-        const childRows = [];
-        children.forEach(childName => {
-            const childLower = childName.toLowerCase();
-            const childEntries = rowMap[childLower];
-            if (childEntries) {
-                childEntries.forEach(entry => {
-                    childRows.push(entry.row);
-                    // Style child
-                    entry.row.classList.add('menu-child-item');
-                });
-            }
-        });
-        
-        if (childRows.length === 0) return;
-        
+
+    Object.entries(groups).forEach(([parent, childRows]) => {
+        const parentRow = sidebar.querySelector('tr.model-' + CSS.escape(parent));
+        const parentLink = parentRow && parentRow.querySelector('th a');
+        if (!parentLink) return;   // no parent listed: the rows stay as they are
+
+        childRows.forEach(row => row.classList.add('menu-child-item'));
+
         // Create arrow
         const arrow = document.createElement('span');
         arrow.className = 'menu-toggle-arrow';
-        arrow.innerHTML = '▶';
+        arrow.textContent = '▶';
         parentLink.insertBefore(arrow, parentLink.firstChild);
         parentLink.style.fontWeight = 'bold';
-      
-        
-        // Set initial state
-        const isCollapsed = savedState[parent] !== false;
-        
-        function updateDisplay(collapsed) {
-            if (collapsed) {
-                arrow.style.transform = 'rotate(0deg)';
-                childRows.forEach(row => {
-                    row.style.setProperty('display', 'none', 'important');
-                });
-            } else {
-                arrow.style.transform = 'rotate(90deg)';
-                childRows.forEach(row => {
-                    row.style.setProperty('display', 'block', 'important');
-                });
-            }
+
+        // Closed unless it was left open.
+        let stored = savedState[parent];
+        if (stored === undefined) stored = savedState[OLD_KEYS[parent]];
+        let collapsed = stored !== false;
+
+        function updateDisplay() {
+            arrow.style.transform = collapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+            childRows.forEach(row => {
+                row.style.setProperty('display', collapsed ? 'none' : 'block', 'important');
+            });
         }
-        
-        // Apply initial state
-        updateDisplay(isCollapsed);
-        
-        // Toggle function
+        updateDisplay();
+
         function toggleChildren(e) {
             e.preventDefault();
             e.stopPropagation();
-            
-            const currentlyCollapsed = childRows[0].style.display === 'none';
-            const newState = !currentlyCollapsed;
-            
-            updateDisplay(newState);
-            
-            // Save state
-            savedState[parent] = newState;
-            localStorage.setItem('sidebarState', JSON.stringify(savedState));
+            collapsed = !collapsed;
+            updateDisplay();
+            savedState[parent] = collapsed;
+            try {
+                localStorage.setItem('sidebarState', JSON.stringify(savedState));
+            } catch (e) { /* private window: the group still opens */ }
         }
-        
+
         // Click handlers
         arrow.addEventListener('click', toggleChildren);
         parentLink.addEventListener('dblclick', toggleChildren);
     });
-    
+
     // Add CSS
     const style = document.createElement('style');
     style.textContent = `
@@ -701,10 +664,15 @@ document.addEventListener('DOMContentLoaded', function() {
         #nav-sidebar table {
             width: 100%;
         }
+        /* Section headings (Project, System, ...) are plain text, not links. */
+        #nav-sidebar caption .section {
+            color: #8481b0 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
     `;
     document.head.appendChild(style);
     
-    console.log('✅ Collapsible sidebar menu initialized');
 });
 </script>
 

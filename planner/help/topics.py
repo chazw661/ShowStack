@@ -385,7 +385,7 @@ TOPICS = (
         slug='console-templates',
         title='Save and load console templates',
         section='Consoles & I/O',
-        summary='Save a console to My templates and load it into another project.',
+        summary='Save a console as a template and load it into another project.',
         pages=(
             'admin:planner_console_changelist',
             'admin:console_template_library',

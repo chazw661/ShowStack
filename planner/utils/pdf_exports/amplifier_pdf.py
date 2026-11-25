@@ -1,6 +1,6 @@
 # planner/utils/pdf_exports/amplifier_pdf.py
 """
-Amplifier Assignments PDF Export.
+Amplifiers PDF Export.
 
 Mirrors the ShowStack "Amp Assignment" rack-view module using the shared
 report_kit toolkit (kit.amp_card renders one styled front-panel card per amp).
@@ -36,7 +36,7 @@ def export_all_amps_pdf(current_project):
         S = kit.styles()
         story = [Paragraph("ERROR: No project selected", S['doc_title'])]
         kit.build_pdf(buffer, story, pagesize=kit.LANDSCAPE_PAGE,
-                      title="Amplifier Assignments")
+                      title="Amplifiers")
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="Error.pdf"'
@@ -46,7 +46,7 @@ def export_all_amps_pdf(current_project):
     story = []
 
     # Title header
-    story += kit.title_header("Amplifier Assignments", current_project.name)
+    story += kit.title_header("Amplifiers", current_project.name)
 
     # Query amps for this project only
     amps = (Amp.objects.filter(project=current_project)
@@ -75,8 +75,8 @@ def export_all_amps_pdf(current_project):
     buffer = BytesIO()
     kit.build_pdf(buffer, story, pagesize=kit.LANDSCAPE_PAGE,
                   project_name=current_project.name,
-                  title="Amplifier Assignments")
+                  title="Amplifiers")
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="Amplifier_Assignments.pdf"'
+    response['Content-Disposition'] = 'attachment; filename="Amplifiers.pdf"'
     return response

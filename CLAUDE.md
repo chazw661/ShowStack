@@ -199,7 +199,7 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 
 ### Custom admin site
 - **Always register models on `showstack_admin_site`, NOT `admin.site`.**
-- `admin_ordering.py` controls sidebar hierarchy. **Update it whenever a new admin-registered model is added**, otherwise the sidebar grouping will be wrong.
+- `admin_ordering.py` controls the sidebar: `SECTIONS` (Project, System, Comms, Mics, Show, Libraries, Admin) lists every row in order, `GROUPS` the rows that fold under a parent, `SUPERUSER_ONLY` the rows hidden from everyone else (sidebar only, permissions unchanged), `NOT_IN_SIDEBAR` the registered models deliberately left out. **Whenever a new admin-registered model is added, put it in a section or in `NOT_IN_SIDEBAR`** -- it is not listed otherwise, and `planner.tests.test_sidebar` fails until it is placed. That test also pins the whole sidebar for superuser / owner / editor / viewer. Folding rows are matched by model name (`data-sidebar-parent` in `templates/admin/app_list.html`), never by link text.
 
 ### Deployment
 - Pushing to `main` on GitHub triggers automatic Railway redeploy.
