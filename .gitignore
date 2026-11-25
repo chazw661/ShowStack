@@ -48,3 +48,6 @@ ENV/
 db.sqlite3
 db.sqlite3.backup
 !planner/data/comm_config/pouchdb_factory/*.log
+
+# Railway IaC SDK (npm install railway), local only
+node_modules/
