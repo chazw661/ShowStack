@@ -204,12 +204,12 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 ### Deployment
 - Pushing to `main` on GitHub triggers automatic Railway redeploy.
 - Solo development typically goes straight to `main`; use feature branches only when the work is risky or spans multiple sessions.
-- **Railway deploy settings live in `.railway/railway.ts`** (Railway Infrastructure as Code; `railway.json` stops being read on 2026-12-01). It declares the ShowStack service only (a named partial, so Postgres is not managed from this repo): the Nixpacks builder, the start command, the `showstack.io` domain, one replica, and the `showstack-volume` mount at `/data/media`. No variables are in the file (`variables: { managed: false }`); they stay in Railway.
+- **Railway deploy settings live in the ShowStack service's settings on Railway, and nowhere else.** `.railway/railway.ts` (Railway Infrastructure as Code) mirrors them in the repo; `railway.json` is gone (Railway stopped reading those files on 2026-12-01). The file declares the ShowStack service only (a named partial, so Postgres is not managed from this repo): the Nixpacks builder, the start command, the `showstack.io` domain, one replica, and the `showstack-volume` mount at `/data/media`. No variables are in the file (`variables: { managed: false }`); they stay in Railway.
 - **The start command** runs: `collectstatic --noinput && migrate && create_initial_superuser && setup_user_groups && load_amp_profiles && load_cabinets && load_drive_capacity && gunicorn`.
-- **Pushing `.railway/railway.ts` does nothing by itself.** Railway does not read `.railway/` during deploys. A change takes effect only when someone runs `railway config plan`, reads it, then `railway config apply` — Charlie runs these. Read the plan for deletions and for the volume before applying.
-- **Restart policy is dashboard-only.** `railway.ts` has no field for it, so it is whatever the service's settings in the Railway dashboard say (`railway.json` asked for ON_FAILURE, 10 retries). Change it there.
+- **To change a deploy setting** (the start command included): edit `.railway/railway.ts`, run `railway config plan`, read it for deletions and for the volume, then `railway config apply` — Charlie runs these. **Pushing the file does nothing by itself**: Railway does not read `.railway/` during deploys. A setting changed in the dashboard instead leaves the file out of date; `railway config plan` shows the difference.
+- **Restart policy is dashboard-only.** `railway.ts` has no field for it, so it is whatever the service's settings in the Railway dashboard say (the old `railway.json` asked for ON_FAILURE, 10 retries). Change it there.
 - **Never run `railway config pull --include-variables`.** It decrypts variables and writes their values, secrets included, into `railway.ts`. This repo is public.
-- `railway.json` is still in the repo, with the same start command, until the cutover is done and a good deploy has been seen; until it is deleted, change the start command in both files. `railway.ts` imports `railway/iac`; `npm install railway` locally to plan or apply, and never commit `node_modules/`, `package.json` or a lockfile. There is no `Procfile` -- it was deleted because Railway never read it and keeping a second, silently-ignored copy of the deploy command invited editing the wrong one.
+- `railway.ts` imports `railway/iac`; `npm install railway` locally to plan or apply, and never commit `node_modules/`, `package.json` or a lockfile. There is no `Procfile` and no `railway.json`.
 
 ---
 
@@ -283,7 +283,7 @@ element.style.setProperty('color', 'red', 'important');
 ```
 
 ### `collectstatic`
-Runs in the start command (`.railway/railway.ts`) on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure. `ForgivingManifestStaticFilesStorage` logs a warning naming any asset it could not find in the manifest, so grep the Railway logs for `static asset missing from manifest`.
+Runs in the service's start command on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure. `ForgivingManifestStaticFilesStorage` logs a warning naming any asset it could not find in the manifest, so grep the Railway logs for `static asset missing from manifest`.
 
 ---
 
