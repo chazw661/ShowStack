@@ -78,5 +78,5 @@ def export_all_amps_pdf(current_project):
                   title="Amplifiers")
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="Amplifier_Assignments.pdf"'
+    response['Content-Disposition'] = 'attachment; filename="Amplifiers.pdf"'
     return response

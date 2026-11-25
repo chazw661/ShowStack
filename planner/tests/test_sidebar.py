@@ -151,11 +151,20 @@ class SidebarContentsByRole(SidebarBase):
         from PyPDF2 import PdfReader
 
         from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
-        reader = PdfReader(io.BytesIO(export_all_amps_pdf(self.project).content))
+        response = export_all_amps_pdf(self.project)
+        self.assertIn('filename="Amplifiers.pdf"', response['Content-Disposition'])
+        reader = PdfReader(io.BytesIO(response.content))
         self.assertEqual('Amplifiers', reader.metadata.title)
         text = reader.pages[0].extract_text()
         self.assertIn('Amplifiers', text)
         self.assertNotIn('Amplifier Assignments', text)
+
+    def test_the_power_plan_page_heads_its_amps_like_the_sidebar_row(self):
+        from planner.utils.power_plan_generator import generate
+        generate(self.project, self.users['owner'])
+        html = self.page('owner', reverse('planner:power_distribution_calculator')).content.decode()
+        self.assertIn('<h2 class="panel-title">Power Plan Amps</h2>', html)
+        self.assertNotIn('Amplifier Assignments', html)
 
 
 class HiddenRowsKeepTheirPages(SidebarBase):
