@@ -15,7 +15,7 @@ assignees: chazw661
 - [ ] COMM Belt Pack
 - [ ] Consoles
 - [ ] Devices
-- [ ] Amplifier Assignments
+- [ ] Amplifiers
 - [ ] PA Cable Schedule
 - [ ] IP Address Management
 - [ ] Audio Checklist
