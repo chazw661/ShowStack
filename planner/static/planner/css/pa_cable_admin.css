@@ -233,3 +233,80 @@ tr:has(td:contains("GRAND TOTAL")) {
     color: var(--text-muted);
     font-size: 13px;
 }
+
+/* ---- Daisy-chain links (pa_cable_links.js) -----------------------------
+   The chain-icon "Linked" button beside Cable, and the Links inline it
+   shows. Admin styles use !important throughout, so these do too. */
+.pa-linked-toggle {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 5px 12px !important;
+    border: 1px solid var(--ss-border) !important;
+    border-radius: 14px !important;
+    background: transparent !important;
+    color: #aaa !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+}
+.pa-linked-toggle.is-on {
+    border-color: #4a9eff !important;
+    background: rgba(74, 158, 255, 0.16) !important;
+    color: #eee !important;
+}
+.pa-linked-toggle:focus-visible {
+    outline: 2px solid #4a9eff !important;
+    outline-offset: 2px !important;
+}
+.pa-linked-toggle:disabled { cursor: default !important; opacity: 0.75 !important; }
+.pa-linked-hint {
+    display: none;
+    margin-left: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.pa-linked-toggle.is-on + .pa-linked-hint { display: inline; }
+
+.pa-links-group.pa-links-hidden { display: none !important; }
+.pa-links-group.pa-links-off tbody tr.form-row { opacity: 0.45 !important; }
+.pa-links-group.pa-links-off tr.add-row { display: none !important; }
+.pa-links-off-note {
+    margin: 0 0 6px !important;
+    padding: 6px 10px !important;
+    border-left: 3px solid #d0a04a !important;
+    color: #eed9a8 !important;
+    font-size: 13px !important;
+}
+/* The site hides every tabular inline's "original" cell (base_site.html,
+   surfaces.css: display none, no width). Here it holds the link's place in
+   the chain and its arrows, so it is shown again -- by id, to win over
+   those rules whatever order the sheets load in. The row's name Django
+   puts in it stays hidden. */
+#links-group.pa-links-group .tabular td.original,
+#links-group.pa-links-group .tabular th.original {
+    display: table-cell !important;
+    width: auto !important;
+    padding: 4px 8px !important;
+    overflow: visible !important;
+    white-space: nowrap !important;
+}
+#links-group.pa-links-group .tabular td.original p { display: none !important; }
+#links-group.pa-links-group .tabular tr.has_original td { padding-top: 4px !important; }
+.pa-link-pos {
+    display: inline-block;
+    min-width: 5.5em;
+    color: #eee;
+    font-size: 13px;
+}
+.pa-link-move {
+    margin-left: 2px !important;
+    padding: 1px 6px !important;
+    border: 1px solid var(--ss-border) !important;
+    border-radius: 3px !important;
+    background: transparent !important;
+    color: #eee !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+    cursor: pointer !important;
+}
+.pa-link-move:disabled { opacity: 0.3 !important; cursor: default !important; }

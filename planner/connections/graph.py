@@ -121,18 +121,36 @@ def _cable_for(transport):
 
 
 def _pa_cable(row):
+    """The run's home-run cable. A linked run also lists its daisy-chain
+    links, in order (``links`` is prefetched; the key is absent without any,
+    so an unlinked run's graph, and its digest, are what they were)."""
     length = row.length or (float(row.length_per_run) if row.length_per_run else None)
-    return {'recorded': True, 'type': row.get_cable_display() if row.cable else '',
-            'ids': [], 'length_ft': length, 'count': row.count}
+    out = {'recorded': True, 'type': row.get_cable_display() if row.cable else '',
+           'ids': [], 'length_ft': length, 'count': row.count}
+    links = [{'type': link.get_cable_display(), 'length_ft': link.length,
+              'count': link.quantity, 'note': link.note}
+             for link in row.links.all()]
+    if links:
+        out['links'] = links
+    return out
+
+
+def _pa_links_text(row):
+    """" → 2× NL 4 25' → 2× NL4 Jumper (under the stage)": each link after
+    the home run, its note in brackets. Empty for a run with none."""
+    return ''.join(f' → {link.summary}' + (f' ({link.note})' if link.note else '')
+                   for link in row.links.all())
 
 
 def _pa_cable_label(row, shared=0):
-    """"HR · 2× NL 8 75' · NL4 Y ×2": the Cable Label, the run, its fan-outs
-    (prefetched), and "1 run → 3 arrays" when it feeds several."""
+    """"HR · 2× NL 8 75' → 2× NL 4 25' · NL4 Y ×2": the Cable Label, the
+    run and its daisy-chain links, its fan-outs (prefetched), and "1 run →
+    3 arrays" when it feeds several."""
     cable = _pa_cable(row)
     length = cable['length_ft']
     run = ' '.join(x for x in (f"{row.count}×", cable['type'],
                                f"{length:g}'" if length else '') if x)
+    run += _pa_links_text(row)
     zone = row.label.name.strip() if row.label_id else ''
     fans = ', '.join(' '.join([f'{fo.get_fan_out_type_display()} ×{fo.quantity}']
                               + [f"+{ext.extension_cable} {ext.extension_length}' ×{ext.quantity}"
@@ -581,6 +599,9 @@ def _merge_cables(cables):
         out[key] = values[0] if len(values) == 1 else values
         if len(values) > 1:
             out['mixed'] = True
+    links = [link for c in recorded for link in c.get('links', ())]
+    if links:
+        out['links'] = links
     shared = max((c.get('shared', 0) for c in recorded), default=0)
     if shared:
         out['shared'] = shared      # this run also feeds other arrays: count it once

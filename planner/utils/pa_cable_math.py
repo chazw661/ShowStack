@@ -65,6 +65,21 @@ somewhere: put the ``PACableSchedule.CABLE_TYPE_CHOICES`` key in it with its
 own descending list, and the breakdown, the summary columns and the PDF all
 follow.
 
+Linked runs
+-----------
+A run can carry on from speaker to speaker (``PACableLink``): the row is the
+home run, amp to the first speaker, and each link after it is its own
+physical cable with its own type, length and quantity. ``entry_pieces(row)``
+yields the home run and then each link, and every total iterates it, so a
+link cannot be counted on screen and missed in an export. A link is never
+merged into the home run's footage (a 75' home run and a 25' link are a 100'
+and a 25', not one 100'), it is grouped under its own type, and a link of a
+jumper type is counted by quantity like any jumper.
+
+A link's quantity is its own, as a fan-out's is: the row's Count does not
+multiply it. A run with no links is one piece, and totals exactly as it did
+before links existed (``test_pa_cable_unlinked_totals``).
+
 Ordering overage
 ----------------
 "Order qty" is the raw count plus a 20% temporary-installation margin,
@@ -75,7 +90,7 @@ reversible and ``round(safe / 1.2)`` does not recover the raw number (raw 17
 """
 
 import math
-from collections import Counter
+from collections import Counter, namedtuple
 
 #: What every cable type is stocked in, longest first.
 DEFAULT_STOCK_LENGTHS = (100, 50, 25)
@@ -108,6 +123,8 @@ RULE_TEXT = (
     "100'). A row's Count multiplies the whole breakdown — 4 × 50' "
     "is four 50' cables, not two 100' ones. Order qty adds a 20% margin, "
     "rounded up. "
+    "A linked run's links are counted as their own cables, each under its "
+    "own type and with its own Qty. "
     "Jumpers are counted by quantity only. Use a cable type, not Jumper, "
     "for any run that needs a length."
 )
@@ -173,6 +190,47 @@ def cable_type_label(value):
     if not value:
         return '(no cable type)'
     return '%s%s' % (value, UNKNOWN_CABLE_SUFFIX)
+
+
+#: One physical cable line on a run: the home run (``link`` is None) or one
+#: of its links. ``count`` is the row's Count for the home run and the
+#: link's own quantity for a link.
+Piece = namedtuple('Piece', 'cable length count link')
+
+
+def entry_pieces(row):
+    """The home run, then each of its links, in order.
+
+    Reads ``row.links.all()``, so prefetch ``links`` on a queryset. An
+    unsaved row has none.
+    """
+    yield Piece(row.cable, row.length, row.count, None)
+    if row.pk:
+        for link in row.links.all():
+            yield Piece(link.cable, link.length, link.quantity, link)
+
+
+def piece_text(cable_type, length, count):
+    """"2× NL 4 25'": how one piece reads. A jumper shows no length."""
+    parts = ['%s×' % count if count else '', cable_type_label(cable_type)]
+    if length and not is_jumper(cable_type):
+        parts.append("%g'" % length)
+    return ' '.join(p for p in parts if p)
+
+
+def link_row_text(n, link, length=False):
+    """"— Link 2", for the row a link gets under its run in an export.
+
+    An em dash, not an arrow glyph: the PDFs are set in Helvetica, which
+    has no "↳" and would print a black box.
+
+    ``length=True`` adds it ("— Link 2 · 25'") where the table has no
+    length column of its own.
+    """
+    text = '— Link %d' % n
+    if length and link.length and not is_jumper(link.cable):
+        text += " · %g'" % link.length
+    return text
 
 
 def stock_lengths_for(cable_type=None):

@@ -23,7 +23,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from planner.forms import PACableInlineForm
-from planner.models import (AmpLocation, PACableSchedule, PAFanOut, Project,
+from planner.models import (AmpLocation, PACableSchedule, PACoupler, PAFanOut,
+                            PAFanOutExtension, Project,
                             ProjectMember)
 from planner.tests.connection_fixtures import ConnectionFixtures
 
@@ -131,7 +132,7 @@ class OneModeAdminTests(_Run, TestCase):
     def admin_post(self, **data):
         out = {'count': 1, 'cable': 'NL_4', 'length': 100, 'color': '#FFFFFF',
                'notes': '', 'drawing_ref': '', 'destination': ''}
-        for prefix in ('fan_outs', 'fan_out_extensions', 'couplers'):
+        for prefix in ('links', 'fan_outs', 'fan_out_extensions', 'couplers'):
             out.update({f'{prefix}-TOTAL_FORMS': 0, f'{prefix}-INITIAL_FORMS': 0})
         out.update(data)
         return out
@@ -166,6 +167,38 @@ class OneModeAdminTests(_Run, TestCase):
         self.assertEqual(list(copy.speaker_arrays.all()), [arr])
         self.assertEqual((copy.amp, copy.amp_location), (self.amp_a, self.rack))
         self.assertEqual(copy.fan_outs.count(), 1)
+
+    def test_duplicate_copies_fan_out_extensions_and_couplers(self):
+        """The copy used to keep the fan-outs and drop what hung off them."""
+        row = self.text_cable(destination='Main L', amp=self.amp_a)
+        fan = PAFanOut.objects.create(cable_schedule=row, fan_out_type='NL4_Y', quantity=2)
+        plain = PAFanOut.objects.create(cable_schedule=row, fan_out_type='NL8_Y', quantity=1)
+        PAFanOutExtension.objects.create(cable_schedule=row, fan_out=fan,
+                                         extension_cable='NL4', extension_length=50, quantity=3)
+        PAFanOutExtension.objects.create(cable_schedule=row, fan_out=fan,
+                                         extension_cable='NL8', extension_length=100, quantity=1)
+        PACoupler.objects.create(cable_schedule=row, coupler_type='NL4_COUPLER', quantity=2)
+        self.client.post(reverse(CHANGELIST), {'action': 'duplicate_cable_runs',
+                                               '_selected_action': [row.pk]})
+        copy = PACableSchedule.objects.exclude(pk=row.pk).get(project=self.project)
+
+        def children(run):
+            return ([(f.fan_out_type, f.quantity,
+                      [(e.extension_cable, e.extension_length, e.quantity)
+                       for e in f.extensions.all()])
+                     for f in run.fan_outs.all()],
+                    [(c.coupler_type, c.quantity) for c in run.couplers.all()])
+
+        self.assertEqual(children(copy), children(row))
+        self.assertEqual(children(copy), (
+            [('NL4_Y', 2, [('NL4', 50, 3), ('NL8', 100, 1)]), ('NL8_Y', 1, [])],
+            [('NL4_COUPLER', 2)]))
+        # Each copied extension hangs off the copy's fan-out, not the original's.
+        for ext in PAFanOutExtension.objects.filter(cable_schedule=copy):
+            self.assertEqual(ext.fan_out.cable_schedule_id, copy.pk)
+        # ... and the original still has its own.
+        self.assertEqual(PAFanOutExtension.objects.filter(cable_schedule=row).count(), 2)
+        self.assertEqual(plain.extensions.count(), 0)
 
     def test_a_viewer_can_still_read_the_list(self):
         viewer = get_user_model().objects.create_user('vi', password='pw', is_staff=True)

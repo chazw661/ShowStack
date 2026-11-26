@@ -553,6 +553,16 @@ TOPICS = (
         keywords=('pa cable', 'nl4', 'nl8', 'cable run', 'zone', 'label', 'destination', 'length', 'duplicate',),
     ),
     Topic(
+        slug='pa-cable-links',
+        title='Add daisy-chain links to a run',
+        section='Amps & PA',
+        summary='Log speaker-to-speaker links after the home run, each with its own cable and length.',
+        pages=(
+            'admin:planner_pacableschedule_changelist',
+        ),
+        keywords=('link', 'linked', 'daisy chain', 'chain', 'speaker to speaker', 'home run', 'jumper',),
+    ),
+    Topic(
         slug='wiring-diagram',
         title='Read the wiring diagram',
         section='Amps & PA',

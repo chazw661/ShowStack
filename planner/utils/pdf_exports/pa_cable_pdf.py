@@ -40,11 +40,15 @@ def _cable_rows(queryset, S):
     its CSV and the System Report, so no export can disagree with the screen.
     To falls back to the linked arrays' names when nothing was typed.
 
+    A linked run is followed by one row per link ("— Link 1", ...).
+
     Every typed value goes into a Paragraph, which reads markup, so each is
     escaped: a name with "<" or "&" in it prints as typed.
     """
     data = []
-    for cable in queryset.prefetch_related('fan_outs', 'speaker_arrays'):
+    from planner.utils import pa_cable_math
+
+    for cable in queryset.prefetch_related('fan_outs', 'speaker_arrays', 'links'):
         label_text = escape(cable.cable_label_display or '-')
         from_text = escape(cable.from_display or '-')
         to_text = escape(cable.to_display or '-')
@@ -66,6 +70,21 @@ def _cable_rows(queryset, S):
             Paragraph(notes, S['body']),
             Paragraph(drawing_ref, S['body']),
         ])
+        # A linked run's daisy chain: one row per link under it, in order,
+        # with the link's own quantity, length, cable and note. Blank where
+        # the run's own cells already say it.
+        for n, link in enumerate(cable.links.all(), start=1):
+            jumper = pa_cable_math.is_jumper(link.cable)
+            data.append([
+                '', '',
+                Paragraph(escape(pa_cable_math.link_row_text(n, link)), S['body']),
+                str(link.quantity),
+                f"{link.length}'" if link.length and not jumper else '-',
+                Paragraph(escape(link.get_cable_display()), S['body']),
+                Paragraph('-', S['body']),
+                Paragraph(escape(link.note or '-'), S['body']),
+                Paragraph('-', S['body']),
+            ])
     return data
 
 
@@ -91,18 +110,22 @@ def _quick_order_rows(queryset):
     # Group by each row's own cable value. Iterating CABLE_TYPE_CHOICES and
     # filtering silently dropped any row whose value is not a listed choice --
     # and `cable` defaults to '100_NL4', which is not one.
-    for cable in queryset:
-        cable_name = display_names.get(cable.cable, cable.cable)
-        if not cable_name:
-            continue
-        if pa_cable_math.is_jumper(cable.cable):
-            # Ordered by quantity; whatever length is stored is ignored.
-            jumper_totals[cable_name] = (
-                jumper_totals.get(cable_name, 0) + (cable.count or 0))
-            continue
-        totals.setdefault(cable_name, Counter()).update(
-            pa_cable_math.run_breakdown(
-                cable.length, cable.count, cable.cable))
+    #
+    # Every physical cable on a run: the home run, then each of its links
+    # (pa_cable_math.entry_pieces), each under its own type.
+    for cable in queryset.prefetch_related('links'):
+        for piece in pa_cable_math.entry_pieces(cable):
+            cable_name = display_names.get(piece.cable, piece.cable)
+            if not cable_name:
+                continue
+            if pa_cable_math.is_jumper(piece.cable):
+                # Ordered by quantity; whatever length is stored is ignored.
+                jumper_totals[cable_name] = (
+                    jumper_totals.get(cable_name, 0) + (piece.count or 0))
+                continue
+            totals.setdefault(cable_name, Counter()).update(
+                pa_cable_math.run_breakdown(
+                    piece.length, piece.count, piece.cable))
 
     # Extension cables (issue #23: extensions live in their own table with a
     # per-extension quantity). They are cables like any other, so they go

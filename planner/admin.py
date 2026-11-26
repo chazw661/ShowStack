@@ -3692,8 +3692,10 @@ class GalaxyProcessorAdmin(ProcessorInputLinkAdminMixin, BaseEquipmentAdmin):
 
 # Add these to your admin.py file
 
-from .models import PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler
-from .forms import PACableChangelistForm, PACableInlineForm, PACableRunForm, PAZoneForm
+from .models import (PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler,
+                     PACableLink)
+from .forms import (PACableChangelistForm, PACableInlineForm, PACableLinkForm,
+                    PACableRunForm, PAZoneForm)
 
 class PACableInline(admin.TabularInline):
     """Inline admin for PA cables - spreadsheet-like entry"""
@@ -3852,6 +3854,21 @@ class PACouplerInline(ProjectRoleInlineMixin, admin.TabularInline):
     verbose_name_plural = 'PA Couplers'
 
 
+class PACableLinkInline(ProjectRoleInlineMixin, admin.TabularInline):
+    """The daisy-chain links on a run: speaker 1 to 2, then 2 to 3.
+
+    Shown when the chain-icon "Linked" toggle beside Cable is on
+    (pa_cable_links.js, which also moves this group up under it). No blank
+    row is offered: the toggle adds the first, "Add another Link" the rest.
+    """
+    model = PACableLink
+    form = PACableLinkForm
+    fields = ['order', 'quantity', 'cable', 'length', 'note']
+    extra = 0
+    verbose_name = 'Link'
+    verbose_name_plural = 'Links (speaker to speaker, after the home run)'
+
+
 class CableTypeFilter(admin.SimpleListFilter):
     """Cable filter that can also reach rows with an unrecognised value.
 
@@ -3895,7 +3912,7 @@ class PACableAdmin(BaseEquipmentAdmin):
 
     plain_title_plural = "PA Cable"
     plain_title = "PA Cable Entry"
-    inlines = [PAFanOutInline, PAFanOutExtensionInline, PACouplerInline]
+    inlines = [PACableLinkInline, PAFanOutInline, PAFanOutExtensionInline, PACouplerInline]
 
     def response_post_save_change(self, request, obj):
         """Issue #23: keep the engineer on the cable edit page after Save so
@@ -3920,7 +3937,8 @@ class PACableAdmin(BaseEquipmentAdmin):
         return HttpResponseRedirect(url + '?saved=1')
     list_display = [
     'cable_label_col', 'from_col', 'to_col', 'arrays_col', 'count', 'length',
-    'cable_display', 'fan_outs_col', 'couplers_col', 'extensions_col',  # issue #73: broken out
+    'cable_display', 'links_col',
+    'fan_outs_col', 'couplers_col', 'extensions_col',  # issue #73: broken out
     'notes', 'drawing_ref','color_display'
 ]
     list_filter = [CableTypeFilter]
@@ -3930,7 +3948,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     change_list_template = 'admin/planner/pacableschedule/change_list.html'
     
-    readonly_fields = ('array_speaker_reference',)
+    readonly_fields = ('array_speaker_reference', 'linked_toggle')
 
     filter_horizontal = ('speaker_arrays',)
 
@@ -3948,7 +3966,7 @@ class PACableAdmin(BaseEquipmentAdmin):
             ),
         }),
         ('Cable Configuration', {
-            'fields': ('count', 'length', 'cable', 'color')
+            'fields': ('count', 'length', 'cable', 'linked_toggle', 'color')
         }),
         ('Documentation', {
             'fields': ('notes', 'drawing_ref')
@@ -3986,13 +4004,23 @@ class PACableAdmin(BaseEquipmentAdmin):
 
     @admin.action(description='Duplicate selected cable runs')
     def duplicate_cable_runs(self, request, queryset):
-        """Issue #22: clone each selected PACableSchedule row (including its
-        PAFanOut children) so engineers can use a similar cable definition
-        as a starting point for a new run."""
+        """Issue #22: clone each selected PACableSchedule row with everything
+        entered on it (linked arrays, links, fan-outs and their extensions,
+        couplers) so engineers can use a similar cable definition as a
+        starting point for a new run.
+
+        It used to copy the fan-outs and stop: their extensions and the
+        run's couplers stayed behind, so the copy ordered less cable than
+        the run it was copied from.
+        """
         n_cables = 0
         n_fans = 0
         for cable in queryset:
-            fan_outs = list(cable.fan_outs.all())
+            # Read every child before the pk is cleared: after it, `cable`
+            # is the copy and has none.
+            fan_outs = [(fan, list(fan.extensions.all())) for fan in cable.fan_outs.all()]
+            couplers = list(cable.couplers.all())
+            links = list(cable.links.all())
             arrays = list(cable.speaker_arrays.all())
             cable.pk = None
             cable._state.adding = True
@@ -4000,11 +4028,22 @@ class PACableAdmin(BaseEquipmentAdmin):
             # add(), not set(): set() diffs against the prefetched cache,
             # which still describes the original row, and would add nothing.
             cable.speaker_arrays.add(*arrays)
-            for fan in fan_outs:
+            for fan, extensions in fan_outs:
                 fan.pk = None
                 fan._state.adding = True
                 fan.cable_schedule = cable
                 fan.save()
+                for ext in extensions:
+                    ext.pk = None
+                    ext._state.adding = True
+                    ext.cable_schedule = cable
+                    ext.fan_out = fan
+                    ext.save()
+            for child in couplers + links:
+                child.pk = None
+                child._state.adding = True
+                child.cable_schedule = cable
+                child.save()
             n_cables += 1
             n_fans += len(fan_outs)
         suffix = f' with {n_fans} fan-out(s).' if n_fans else '.'
@@ -4149,6 +4188,29 @@ class PACableAdmin(BaseEquipmentAdmin):
         )
         return html
 
+    def links_col(self, obj):
+        """The daisy chain after the home run, one chip per link, in order."""
+        return self._chips([link.summary for link in obj.links.all()], 'cb-link')
+    links_col.short_description = 'Links'
+
+    @admin.display(description='Daisy chain')
+    def linked_toggle(self, obj):
+        """The chain-icon "Linked" switch. pa_cable_links.js drives it: on
+        shows the Links rows under it. Without JavaScript it is inert and
+        the Links section simply stays where Django put it, always shown.
+        A run is linked when it has links, so nothing is stored for this."""
+        return format_html(
+            '<button type="button" id="pa-linked-toggle" class="pa-linked-toggle" '
+            'aria-pressed="false" aria-controls="links-group">'
+            '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>'
+            '<path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>'
+            '<span>Linked</span></button>'
+            '<span class="pa-linked-hint">This run carries on from speaker to speaker. '
+            'Length and Cable above are the home run; each link below has its own.</span>'
+        )
+
     def fan_outs_col(self, obj):
         items = [f"{fo.get_fan_out_type_display()} × {fo.quantity}"
                  for fo in obj.fan_outs.all() if fo.fan_out_type]
@@ -4239,20 +4301,26 @@ class PACableAdmin(BaseEquipmentAdmin):
         # than silently disappearing.
         display_names = dict(PACableSchedule.CABLE_TYPE_CHOICES)
 
+        # Every physical cable on a run: the home run, then each of its
+        # links (pa_cable_math.entry_pieces). A link is grouped under its
+        # own type with its own quantity. A run with no links is the one
+        # piece it always was.
         for cable in qs:
-            name = display_names.get(cable.cable, cable.cable)
-            if not name:
-                continue
-            jumper = pa_cable_math.is_jumper(cable.cable)
-            entry = cable_summary.setdefault(name, empty_entry(jumper))
-            entry['total_runs'] += cable.count or 0
-            if jumper:
-                # Whatever length is stored against a jumper is ignored, not
-                # rewritten -- old rows keep theirs, they just stop counting.
-                continue
-            entry['total_length'] += (cable.length or 0) * (cable.count or 0)
-            add_cables(entry, pa_cable_math.run_breakdown(
-                cable.length, cable.count, cable.cable))
+            for piece in pa_cable_math.entry_pieces(cable):
+                name = display_names.get(piece.cable, piece.cable)
+                if not name:
+                    continue
+                jumper = pa_cable_math.is_jumper(piece.cable)
+                entry = cable_summary.setdefault(name, empty_entry(jumper))
+                entry['total_runs'] += piece.count or 0
+                if jumper:
+                    # Whatever length is stored against a jumper is ignored,
+                    # not rewritten -- old rows keep theirs, they just stop
+                    # counting.
+                    continue
+                entry['total_length'] += (piece.length or 0) * (piece.count or 0)
+                add_cables(entry, pa_cable_math.run_breakdown(
+                    piece.length, piece.count, piece.cable))
 
         # A 0' row contributes a run but no cable. Drop a type only when it
         # has neither, which is what the old `total_length > 0` guard meant.
@@ -4391,7 +4459,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         # Write data rows
         for cable in (queryset
                       .select_related('label', 'amp', 'amp_location')
-                      .prefetch_related('fan_outs', 'speaker_arrays')
+                      .prefetch_related('fan_outs', 'speaker_arrays', 'links')
                       .order_by('label__sort_order', 'cable')):
             # Build fan out summary string for this cable
             fan_out_display = ''
@@ -4416,15 +4484,28 @@ class PACableAdmin(BaseEquipmentAdmin):
                 cable.drawing_ref or ''
             ])
             
-            # Track cable totals
-            cable_type_name = cable.get_cable_display()
-            if cable_type_name not in cable_totals:
-                cable_totals[cable_type_name] = {
-                    'quantity': 0,
-                    'total_length': 0
-                }
-            cable_totals[cable_type_name]['quantity'] += cable.count
-            cable_totals[cable_type_name]['total_length'] += cable.total_cable_length
+            # A linked run's links, one row each under it. The file has no
+            # length column (the summary below carries the footage), so a
+            # link's length rides in its To cell. A run with no links
+            # writes nothing here.
+            for n, link in enumerate(cable.links.all(), start=1):
+                writer.writerow([
+                    '', '', pa_cable_math.link_row_text(n, link, length=True),
+                    link.quantity, link.get_cable_display(), '', link.note, ''
+                ])
+
+            # Track cable totals: the home run and each link, under its own
+            # type (pa_cable_math.entry_pieces).
+            for piece in pa_cable_math.entry_pieces(cable):
+                cable_type_name = (piece.link or cable).get_cable_display()
+                if cable_type_name not in cable_totals:
+                    cable_totals[cable_type_name] = {
+                        'quantity': 0,
+                        'total_length': 0
+                    }
+                cable_totals[cable_type_name]['quantity'] += piece.count
+                cable_totals[cable_type_name]['total_length'] += (
+                    piece.count * (piece.length or 0))
 
             # Track fan out totals. This loop used to sit one level out,
             # in the method body rather than in the per-cable loop, so it
@@ -4604,6 +4685,7 @@ class PACableAdmin(BaseEquipmentAdmin):
             'admin/js/pa_cable_inlines.js',
             'admin/js/pa_cable_array_speakers.js',
             'admin/js/pa_cable_jumpers.js',
+            'admin/js/pa_cable_links.js',
         )
 
 
@@ -4613,7 +4695,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         # Issue #73: the list now renders fan-outs / couplers / extensions per
         # row, so prefetch them to avoid N+1 queries in the changelist.
         qs = (qs.select_related('label', 'amp', 'amp_location')
-              .prefetch_related('fan_outs__extensions', 'couplers', 'speaker_arrays'))
+              .prefetch_related('fan_outs__extensions', 'couplers', 'speaker_arrays', 'links'))
         if hasattr(request, 'current_project') and request.current_project:
             return qs.filter(project=request.current_project)
         return qs.none()
@@ -4623,6 +4705,11 @@ class PACableAdmin(BaseEquipmentAdmin):
         if not change and hasattr(request, 'current_project') and request.current_project:
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        """Links are 1..N in the order they were left on the page."""
+        super().save_related(request, form, formsets, change)
+        PACableLink.renumber(form.instance)
 
                 #--------COMM Page-------
 
