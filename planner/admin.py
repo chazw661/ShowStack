@@ -3986,13 +3986,22 @@ class PACableAdmin(BaseEquipmentAdmin):
 
     @admin.action(description='Duplicate selected cable runs')
     def duplicate_cable_runs(self, request, queryset):
-        """Issue #22: clone each selected PACableSchedule row (including its
-        PAFanOut children) so engineers can use a similar cable definition
-        as a starting point for a new run."""
+        """Issue #22: clone each selected PACableSchedule row with everything
+        entered on it (linked arrays, fan-outs and their extensions,
+        couplers) so engineers can use a similar cable definition as a
+        starting point for a new run.
+
+        It used to copy the fan-outs and stop: their extensions and the
+        run's couplers stayed behind, so the copy ordered less cable than
+        the run it was copied from.
+        """
         n_cables = 0
         n_fans = 0
         for cable in queryset:
-            fan_outs = list(cable.fan_outs.all())
+            # Read every child before the pk is cleared: after it, `cable`
+            # is the copy and has none.
+            fan_outs = [(fan, list(fan.extensions.all())) for fan in cable.fan_outs.all()]
+            couplers = list(cable.couplers.all())
             arrays = list(cable.speaker_arrays.all())
             cable.pk = None
             cable._state.adding = True
@@ -4000,11 +4009,22 @@ class PACableAdmin(BaseEquipmentAdmin):
             # add(), not set(): set() diffs against the prefetched cache,
             # which still describes the original row, and would add nothing.
             cable.speaker_arrays.add(*arrays)
-            for fan in fan_outs:
+            for fan, extensions in fan_outs:
                 fan.pk = None
                 fan._state.adding = True
                 fan.cable_schedule = cable
                 fan.save()
+                for ext in extensions:
+                    ext.pk = None
+                    ext._state.adding = True
+                    ext.cable_schedule = cable
+                    ext.fan_out = fan
+                    ext.save()
+            for coupler in couplers:
+                coupler.pk = None
+                coupler._state.adding = True
+                coupler.cable_schedule = cable
+                coupler.save()
             n_cables += 1
             n_fans += len(fan_outs)
         suffix = f' with {n_fans} fan-out(s).' if n_fans else '.'
