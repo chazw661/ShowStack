@@ -34,7 +34,8 @@ from planner.admin import PACableAdmin
 from planner.admin_site import showstack_admin_site
 from planner.connections.graph import digest, project_graph
 from planner.forms import PACableLinkForm
-from planner.models import PACableLink, PACableSchedule, Project, ProjectMember
+from planner.models import (PACableLink, PACableSchedule, PACoupler, PAFanOut,
+                            PAFanOutExtension, Project, ProjectMember)
 from planner.tests.connection_fixtures import ConnectionFixtures
 from planner.tests.test_wiring_dxf import read as read_dxf
 from planner.utils import pa_cable_math
@@ -359,12 +360,47 @@ class LinkAdminTests(_Linked, TestCase):
                          list(self.run.links.values_list(*fields)))
         self.assertEqual(self.run.links.count(), 3)
 
-    def test_duplicating_the_project_copies_the_links(self):
+    def test_duplicating_the_project_copies_everything_on_a_run(self):
+        """A linked run with a fan-out, its extensions and a coupler: all of
+        it arrives in the copy. (Only the fan-outs used to.)"""
         self.chain()
+        fan = PAFanOut.objects.create(cable_schedule=self.run, fan_out_type='NL4_Y', quantity=2)
+        PAFanOutExtension.objects.create(cable_schedule=self.run, fan_out=fan,
+                                         extension_cable='NL4', extension_length=50, quantity=3)
+        PAFanOutExtension.objects.create(cable_schedule=self.run, fan_out=fan,
+                                         extension_cable='NL8', extension_length=100, quantity=1)
+        PAFanOut.objects.create(cable_schedule=self.run, fan_out_type='NL8_Y', quantity=1)
+        PACoupler.objects.create(cable_schedule=self.run, coupler_type='NL4_COUPLER', quantity=2)
+        PACoupler.objects.create(cable_schedule=self.run, coupler_type='CACOM_COUPLER', quantity=1)
+
+        def everything(run):
+            return {
+                'links': list(run.links.values_list('order', 'quantity', 'cable', 'length', 'note')),
+                'fan_outs': [(f.fan_out_type, f.quantity,
+                              [(e.extension_cable, e.extension_length, e.quantity)
+                               for e in f.extensions.all()])
+                             for f in run.fan_outs.all()],
+                'couplers': list(run.couplers.values_list('coupler_type', 'quantity')),
+            }
+
+        before = everything(self.run)
+        self.assertEqual(before, {
+            'links': [(1, 2, 'NL_4', 25, 'over the truss'), (2, 1, 'NL_4', 110, ''),
+                      (3, 3, 'NL4_JUMPER', None, '')],
+            'fan_outs': [('NL4_Y', 2, [('NL4', 50, 3), ('NL8', 100, 1)]), ('NL8_Y', 1, [])],
+            'couplers': [('NL4_COUPLER', 2), ('CACOM_COUPLER', 1)],
+        })
         copy = self.project.duplicate('Copy')
         run = PACableSchedule.objects.get(project=copy)
-        self.assertEqual(run.link_summary, self.run.link_summary)
-        self.assertEqual(self.run.links.count(), 3)
+        self.assertEqual(everything(run), before)
+        # Each copied extension hangs off the copy's own fan-out and run.
+        for ext in PAFanOutExtension.objects.filter(cable_schedule=run):
+            self.assertEqual(ext.fan_out.cable_schedule_id, run.pk)
+        # The original is untouched, and the two shows total the same.
+        self.assertEqual(everything(self.run), before)
+        self.assertEqual(
+            pa_cable_pdf._quick_order_rows(PACableSchedule.objects.filter(project=copy)),
+            pa_cable_pdf._quick_order_rows(self.queryset()))
 
     def test_a_viewer_reads_the_links_and_cannot_change_them(self):
         link = self.link(1, note='over the truss')

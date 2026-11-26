@@ -751,13 +751,29 @@ class Project(models.Model):
                     [array_map[a] for a in cable.speaker_arrays.values_list('id', flat=True)
                      if a in array_map])
 
-                # Duplicate PAFanOuts
+                # Duplicate PAFanOuts, each with its extensions. Only the
+                # fan-outs used to be copied: their extensions and the run's
+                # couplers stayed behind, so the copied show ordered less
+                # cable and fewer couplers than the show it was copied from.
                 for fan_out in cable.fan_outs.all():
-                    PAFanOut.objects.create(
+                    new_fan_out = PAFanOut.objects.create(
                         cable_schedule=new_cable,
                         fan_out_type=fan_out.fan_out_type,
                         quantity=fan_out.quantity
                     )
+                    for ext in fan_out.extensions.all():
+                        PAFanOutExtension.objects.create(
+                            cable_schedule=new_cable, fan_out=new_fan_out,
+                            extension_cable=ext.extension_cable,
+                            extension_length=ext.extension_length,
+                            quantity=ext.quantity)
+
+                # ... its couplers ...
+                for coupler in cable.couplers.all():
+                    PACoupler.objects.create(
+                        cable_schedule=new_cable,
+                        coupler_type=coupler.coupler_type,
+                        quantity=coupler.quantity)
 
                 # ... and its daisy-chain links, in order.
                 for link in cable.links.all():
