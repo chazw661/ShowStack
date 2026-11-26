@@ -20,7 +20,6 @@ from django.urls import path
 from django.urls import include
 from django.shortcuts import redirect  
 from django.views.generic import RedirectView
-from planner import views
 from planner.admin_site import showstack_admin_site
 from planner import views as planner_views
 
@@ -34,9 +33,6 @@ urlpatterns = [
     path('', include('marketing.urls')),
 
     path('', include('accounts.urls')),
-    
-    # Dashboard at root level (accessible at /dashboard/)
-    path('dashboard/', views.dashboard, name='dashboard'),
     
     # Include all planner URLs under /audiopatch/ prefix
     path('audiopatch/', include('planner.urls')),
