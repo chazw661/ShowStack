@@ -403,6 +403,31 @@ class DashboardScopingTests(TenantIsolationBase):
             'total_amp_channels sums every tenant\'s amps',
         )
 
+    def test_project_dashboard_lists_only_the_owners_projects(self):
+        """/dashboard/ is accounts.views.dashboard, the project list.
+
+        planner.views.dashboard used to be routed at the same path (shadowed,
+        never reached) and counted every tenant's rows with bare
+        ``.objects.count()``. It is gone; this pins what answers the URL.
+        """
+        self.assertEqual('/dashboard/', reverse('dashboard'))
+        resp = self.client.get('/dashboard/')
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual(
+            'dashboard', resp.resolver_match.func.__name__)
+        self.assertEqual(
+            'accounts.views', resp.resolver_match.func.__module__)
+        self.assertIn('accounts/dashboard.html', [t.name for t in resp.templates])
+        self.assertEqual(
+            [self.project_a], list(resp.context['owned_projects']))
+        self.assertEqual([], list(resp.context['member_projects']))
+        self.assertContains(resp, 'Project A')
+        self.assertNoLeak(resp, '/dashboard/')
+
+    def test_legacy_planner_dashboard_view_is_gone(self):
+        from planner import views
+        self.assertFalse(hasattr(views, 'dashboard'))
+
     def test_dashboard_stats_json_counts_only_current_project(self):
         resp = self.client.get(reverse('planner:dashboard_stats'))
         self.assertEqual(200, resp.status_code)

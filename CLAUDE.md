@@ -47,6 +47,18 @@ run the plain suite (migrations on). Mandatory for PRs that add a migration.
 `python manage.py test planner.tests.test_amp_profiles --settings=audiopatch.test_settings`.
 Run the full suite (both modes, ~17 min) once, before opening the PR.
 
+**Browser gate:** every Playwright module is named `*_browser.py` (13 today),
+so one glob runs them all; they are skipped without `SS_BROWSER_TESTS=1`:
+
+```bash
+SS_BROWSER_TESTS=1 python manage.py test planner.tests --pattern "*_browser.py" \
+    --settings=audiopatch.test_settings
+```
+
+Name any new module that reads `SS_BROWSER_TESTS` `*_browser.py`:
+`planner.tests.test_browser_gate` fails otherwise. Some of them also hold
+plain tests (the Mic Overview ones), which still run in the normal suites.
+
 The two modes differ: `test_settings` skips migrations, so seeded rows (Source
 Hardware options, the amp catalogue) are absent there and present in the plain
 run. Tests must pass in both, so assert on the rows a test creates, never on

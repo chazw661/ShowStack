@@ -7257,23 +7257,6 @@ class MicShowInfoAdmin(BaseEquipmentAdmin):
         return super().has_delete_permission(request, obj)
 
 
-# ===== ADD TO planner/urls.py (or create if doesn't exist) =====
-
-
-from . import views
-
-app_name = 'planner'
-
-urlpatterns = [
-    path('dashboard/', views.dashboard, name='dashboard'),
-    path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
-    path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
-    path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
-    path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
-    path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
-]
-
-
 #--------Power Estimator---------
 
 
