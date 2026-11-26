@@ -482,7 +482,7 @@ class ProjectIndex:
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
                             .select_related('label')
-                            .prefetch_related('speaker_arrays', 'fan_outs__extensions')
+                            .prefetch_related('speaker_arrays', 'fan_outs__extensions', 'links')
                             .order_by('id'))
 
 

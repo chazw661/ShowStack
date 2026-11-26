@@ -758,6 +758,13 @@ class Project(models.Model):
                         fan_out_type=fan_out.fan_out_type,
                         quantity=fan_out.quantity
                     )
+
+                # ... and its daisy-chain links, in order.
+                for link in cable.links.all():
+                    PACableLink.objects.create(
+                        cable_schedule=new_cable, order=link.order,
+                        quantity=link.quantity, cable=link.cable,
+                        length=link.length, note=link.note)
             
             # 12. Duplicate Audio Checklists and Tasks
             for checklist in self.audio_checklists.all():
@@ -3496,8 +3503,19 @@ class PACableSchedule(models.Model):
     
     @property
     def total_cable_length(self):
-        """Calculate total cable length needed"""
+        """The home run's footage: count x length.
+
+        A linked run's links are not in this: each has its own type and
+        quantity, so a total goes through ``pa_cable_math.entry_pieces``.
+        """
         return self.count * self.length
+
+    @property
+    def link_summary(self):
+        """"2× NL 4 25' → 2× NL4 Jumper", or "" for a run with no links."""
+        if not self.pk:
+            return ""
+        return " → ".join(link.summary for link in self.links.all())
     
 
     @property
@@ -3659,6 +3677,76 @@ class PACoupler(models.Model):
 
     def __str__(self):
         return f"{self.get_coupler_type_display()} x{self.quantity}"
+
+
+class PACableLink(models.Model):
+    """One daisy-chain link on a PA cable run: speaker 1 to speaker 2, then
+    2 to 3, and so on.
+
+    The run itself (``PACableSchedule.length`` / ``cable``) is the home run,
+    amp to the first speaker. Each link after it is its own physical cable
+    with its own type and length, so it is ordered and pulled on its own:
+    ``pa_cable_math.entry_pieces`` hands every total the home run and then
+    each link.
+
+    ``quantity`` is the link's own, like a fan-out's or a coupler's: the
+    run's Count never multiplies it. (The form starts a new link at the
+    run's Count, because two identical chains is the usual case.)
+
+    A run is "linked" when it has links. There is no flag to disagree with
+    the rows.
+
+    ``order`` is 1..N within the run, renumbered on every save
+    (``renumber``). No unique constraint: a formset that swaps two rows
+    saves them one at a time, which a plain constraint refuses, and SQLite
+    silently drops a deferrable one.
+    """
+    cable_schedule = models.ForeignKey(
+        'PACableSchedule',
+        on_delete=models.CASCADE,
+        related_name='links',
+    )
+    order = models.PositiveSmallIntegerField(default=0)
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name="Qty",
+    )
+    cable = models.CharField(
+        max_length=20,
+        choices=PACableSchedule.CABLE_TYPE_CHOICES,
+        default='NL_4',
+        verbose_name="Cable",
+    )
+    # Blank for a jumper type, which is ordered by quantity and has none.
+    length = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        verbose_name="Length (ft)",
+    )
+    note = models.CharField(max_length=120, blank=True, default='', verbose_name="Note")
+
+    class Meta:
+        verbose_name = "Link"
+        verbose_name_plural = "Links"
+        ordering = ['order', 'id']
+
+    @property
+    def summary(self):
+        """"2× NL 4 25'", or "2× NL4 Jumper": a jumper has no length."""
+        from planner.utils import pa_cable_math
+        return pa_cable_math.piece_text(self.cable, self.length, self.quantity)
+
+    def __str__(self):
+        return self.summary
+
+    @classmethod
+    def renumber(cls, cable_schedule):
+        """Make the run's links 1..N, in their current order."""
+        for n, link in enumerate(cls.objects.filter(cable_schedule=cable_schedule), start=1):
+            if link.order != n:
+                cls.objects.filter(pk=link.pk).update(order=n)
             
 
 

@@ -132,7 +132,7 @@ class OneModeAdminTests(_Run, TestCase):
     def admin_post(self, **data):
         out = {'count': 1, 'cable': 'NL_4', 'length': 100, 'color': '#FFFFFF',
                'notes': '', 'drawing_ref': '', 'destination': ''}
-        for prefix in ('fan_outs', 'fan_out_extensions', 'couplers'):
+        for prefix in ('links', 'fan_outs', 'fan_out_extensions', 'couplers'):
             out.update({f'{prefix}-TOTAL_FORMS': 0, f'{prefix}-INITIAL_FORMS': 0})
         out.update(data)
         return out

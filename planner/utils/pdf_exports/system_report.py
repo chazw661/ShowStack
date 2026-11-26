@@ -887,7 +887,7 @@ def _section_pa_cable(project, styles, PACableSchedule):
     cables = (PACableSchedule.objects
               .filter(project=project)
               .select_related('label', 'amp', 'amp_location')
-              .prefetch_related('fan_outs', 'speaker_arrays')
+              .prefetch_related('fan_outs', 'speaker_arrays', 'links')
               .order_by('label'))
 
     if not cables.exists():
@@ -931,6 +931,19 @@ def _section_pa_cable(project, styles, PACableSchedule):
             str(cable.count) if cable.count else '0',
             fan_str,
         ])
+        # A linked run's daisy chain: one row per link under it, with the
+        # link's own type, length and quantity. Its note follows its name,
+        # the table having no notes column.
+        for n, link in enumerate(cable.links.all(), start=1):
+            name = pa_cable_math.link_row_text(n, link)
+            rows.append([
+                '', '',
+                f'{name} ({link.note})' if link.note else name,
+                pa_cable_math.cable_type_label(link.cable),
+                str(link.length) if link.length and not pa_cable_math.is_jumper(link.cable) else '',
+                str(link.quantity),
+                '-',
+            ])
     headers = ['Cable Label', 'From', 'To', 'Cable Type', 'Length', 'Count',
                'Fan Outs']
     widths = [w * inch for w in (1.0, 1.5, 1.8, 1.2, 0.7, 0.6, 2.8)]

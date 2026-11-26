@@ -147,6 +147,10 @@
         #result_list td .cb-chip.cb-fanout { background: #2a3a2a !important; color: #b8e0b8 !important; }
         #result_list td .cb-chip.cb-coupler { background: #3a2a2a !important; color: #e0c0a0 !important; }
         #result_list td .cb-chip.cb-ext { background: #2a2a3a !important; color: #c0c0e0 !important; }
+        /* A link in a daisy chain: the arrow before every chip but the
+           first shows they are in order, speaker to speaker. */
+        #result_list td .cb-chip.cb-link { background: #2f2a3a !important; color: #d8c8f0 !important; }
+        #result_list td .cb-chip.cb-link + .cb-chip.cb-link::before { content: "\2192\00a0"; opacity: 0.7; }
         #result_list td .cb-chip.cb-array { background: #2a3440 !important; color: #b8d4f0 !important; }
     </style>
     <script>

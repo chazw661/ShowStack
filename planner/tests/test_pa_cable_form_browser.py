@@ -3,6 +3,11 @@
 No Entry mode; the linked-arrays panel follows Django's filter_horizontal
 picker, which moves options between two lists without a change event.
 
+Daisy-chain links: the chain-icon "Linked" toggle shows the Links rows
+(pa_cable_links.js), a new link starts at the run's Count and cable type,
+the arrows reorder, a jumper link has no length, and switching Linked off
+removes the links on Save and not before.
+
 Skipped unless asked for (needs Playwright and its browsers)::
 
     SS_BROWSER_TESTS=1 python manage.py test planner.tests.test_pa_cable_form_browser \\
@@ -15,6 +20,7 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
 from django.urls import reverse
 
+from planner.models import PACableLink, ProjectMember
 from planner.tests.connection_fixtures import ConnectionFixtures
 
 try:
@@ -135,4 +141,158 @@ class PaCableFormBrowserTests(ConnectionFixtures, StaticLiveServerTestCase):
         page = self.open(reverse('admin:planner_pacableschedule_add'), width=390)
         page.wait_for_selector('#id_speaker_arrays_to', state='attached')
         self.shot(page, 'pa_cable_add_phone.png')
+        self.assertEqual(self.errors, [])
+
+    # -- daisy-chain links ----------------------------------------------------
+
+    ROWS = '#links-group tbody tr.form-row:not(.empty-form)'
+
+    def linked_run(self, *lengths):
+        run = self.text_cable(destination='K2 Left', amp=self.amp_a, cable='NL_8',
+                              count=2, length=75)
+        for n, length in enumerate(lengths, start=1):
+            PACableLink.objects.create(cable_schedule=run, order=n, cable='NL_4',
+                                       length=length, quantity=2, note=f'link {length}')
+        return run
+
+    def positions(self, page):
+        return page.eval_on_selector_all(self.ROWS + ' .pa-link-pos',
+                                         'els => els.map(e => e.textContent)')
+
+    def test_linked_off_by_default_then_add_reorder_and_save(self):
+        page = self.open(reverse('admin:planner_pacableschedule_add'))
+        toggle = page.locator('#pa-linked-toggle')
+        self.assertEqual(toggle.get_attribute('aria-pressed'), 'false')
+        self.assertFalse(page.locator('#links-group').is_visible())
+        # The Links section sits right under the fieldset the toggle is in.
+        self.assertTrue(page.evaluate(
+            "document.getElementById('pa-linked-toggle').closest('fieldset')"
+            ".nextElementSibling.id === 'links-group'"))
+
+        page.select_option('#id_source', label='SL LA12X #1 \u00b7 TEST4')
+        page.fill('#id_destination', 'K2 Left')
+        page.fill('#id_count', '3')
+        page.select_option('#id_cable', 'NL_8')
+        page.fill('#id_length', '75')
+
+        toggle.click()
+        self.assertEqual(toggle.get_attribute('aria-pressed'), 'true')
+        page.wait_for_selector(self.ROWS)
+        self.assertTrue(page.locator('#links-group').is_visible())
+        # A new link starts at the run's Count and the run's cable type.
+        self.assertEqual(page.input_value('[name="links-0-quantity"]'), '3')
+        self.assertEqual(page.input_value('[name="links-0-cable"]'), 'NL_8')
+        page.fill('[name="links-0-length"]', '25')
+        page.fill('[name="links-0-note"]', 'first')
+
+        page.click('#links-group tr.add-row a')
+        page.wait_for_function(f"document.querySelectorAll('{self.ROWS}').length === 2")
+        page.select_option('[name="links-1-cable"]', 'NL_4')
+        page.fill('[name="links-1-length"]', '50')
+        page.fill('[name="links-1-quantity"]', '1')
+        page.fill('[name="links-1-note"]', 'second')
+        self.assertEqual(self.positions(page), ['Spk 1 \u2192 2', 'Spk 2 \u2192 3'])
+        self.shot(page, 'pa_cable_links_on.png')
+
+        # Move the second link earlier: the two rows' values swap.
+        page.locator(self.ROWS).nth(1).locator('.pa-link-move').first.click()
+        self.assertEqual(page.input_value('[name="links-0-note"]'), 'second')
+        self.assertEqual(page.input_value('[name="links-1-note"]'), 'first')
+        self.assertTrue(page.locator(self.ROWS).nth(0).locator('.pa-link-move').first.is_disabled())
+
+        # A jumper link has no length.
+        page.click('#links-group tr.add-row a')
+        page.wait_for_function(f"document.querySelectorAll('{self.ROWS}').length === 3")
+        page.select_option('[name="links-2-cable"]', 'NL4_JUMPER')
+        self.assertFalse(page.locator('[name="links-2-length"]').is_visible())
+        self.assertEqual(page.locator(self.ROWS).nth(2).locator('.pa-length-na').inner_text(),
+                         '\u2014')
+
+        page.click('input[name="_save"]')
+        page.wait_for_load_state('networkidle')
+        run = self.project.pacableschedule_set.get()
+        self.assertEqual(
+            list(run.links.values_list('order', 'quantity', 'cable', 'length', 'note')),
+            [(1, 1, 'NL_4', 50, 'second'), (2, 3, 'NL_8', 25, 'first'),
+             (3, 3, 'NL4_JUMPER', None, '')])
+        page = self.open(reverse('admin:planner_pacableschedule_changelist'))
+        self.assertEqual(page.eval_on_selector_all(
+            '#result_list td.field-links_col .cb-link', 'els => els.map(e => e.textContent)'),
+            ["1\u00d7 NL 4 50'", "3\u00d7 NL 8 25'", '3\u00d7 NL4 Jumper'])
+        self.shot(page, 'pa_cable_links_list.png')
+        self.assertEqual(self.errors, [])
+
+    def test_a_linked_run_opens_on_and_off_removes_its_links_only_on_save(self):
+        run = self.linked_run(25, 50)
+        url = reverse('admin:planner_pacableschedule_change', args=[run.pk])
+        page = self.open(url)
+        toggle = page.locator('#pa-linked-toggle')
+        self.assertEqual(toggle.get_attribute('aria-pressed'), 'true')
+        self.assertEqual(page.locator(self.ROWS).count(), 2)
+
+        toggle.click()
+        self.assertEqual(toggle.get_attribute('aria-pressed'), 'false')
+        self.assertIn('These 2 links will be removed when you save',
+                      page.inner_text('.pa-links-off-note'))
+        self.assertTrue(page.locator('#links-group').is_visible())
+        self.shot(page, 'pa_cable_links_off.png')
+        self.assertEqual(run.links.count(), 2)          # nothing is deleted yet
+
+        # On again takes it back: saving now keeps both.
+        toggle.click()
+        self.assertFalse(page.locator('.pa-links-off-note').is_visible())
+        page.click('input[name="_save"]')
+        page.wait_for_load_state('networkidle')
+        self.assertEqual(list(run.links.values_list('length', flat=True)), [25, 50])
+
+        page = self.open(url)
+        page.locator('#pa-linked-toggle').click()
+        page.click('input[name="_save"]')
+        page.wait_for_load_state('networkidle')
+        self.assertEqual(run.links.count(), 0)
+        self.assertTrue(self.project.pacableschedule_set.filter(pk=run.pk).exists())
+        self.assertEqual(self.errors, [])
+
+    def test_off_drops_a_link_that_was_never_saved(self):
+        page = self.open(reverse('admin:planner_pacableschedule_add'))
+        page.select_option('#id_source', label='SL LA12X #1 \u00b7 TEST4')
+        page.fill('#id_destination', 'K2 Left')
+        page.fill('#id_length', '75')
+        toggle = page.locator('#pa-linked-toggle')
+        toggle.click()
+        page.wait_for_selector(self.ROWS)
+        toggle.click()
+        self.assertEqual(page.locator(self.ROWS).count(), 0)
+        self.assertFalse(page.locator('#links-group').is_visible())
+        page.click('input[name="_save"]')
+        page.wait_for_load_state('networkidle')
+        self.assertEqual(self.project.pacableschedule_set.get().links.count(), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_a_viewer_sees_the_links_and_a_toggle_that_does_nothing(self):
+        from django.contrib.auth import get_user_model
+        run = self.linked_run(25)
+        viewer = get_user_model().objects.create_user('vi', password='pw', is_staff=True)
+        ProjectMember.objects.create(user=viewer, project=self.project, role='viewer',
+                                     invited_by=self.user)
+        self.client.force_login(viewer)
+        session = self.client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+        page = self.open(reverse('admin:planner_pacableschedule_change', args=[run.pk]))
+        toggle = page.locator('#pa-linked-toggle')
+        self.assertTrue(toggle.is_disabled())
+        self.assertEqual(toggle.get_attribute('aria-pressed'), 'true')
+        self.assertIn('link 25', page.inner_text('#links-group'))
+        self.assertEqual(page.locator('#links-group .pa-link-move').count(), 0)
+        self.assertEqual(page.locator('#links-group input:not([type=hidden])').count(), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_the_links_fit_a_phone(self):
+        run = self.linked_run(25, 50)
+        page = self.open(reverse('admin:planner_pacableschedule_change', args=[run.pk]),
+                         width=390)
+        self.assertEqual(page.locator(self.ROWS).count(), 2)
+        self.assertTrue(page.locator('#pa-linked-toggle').is_visible())
+        self.shot(page, 'pa_cable_links_phone.png')
         self.assertEqual(self.errors, [])

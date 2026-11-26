@@ -1146,7 +1146,7 @@ class GalaxyProcessorAdminForm(forms.ModelForm):
     #-----------PA Cable--------
 
 
-from .models import PACableSchedule, PAZone
+from .models import PACableLink, PACableSchedule, PAZone
 
 class PACableForm(forms.ModelForm):
     class Meta:
@@ -1252,6 +1252,51 @@ class JumperLengthMixin:
                 'length',
                 'Enter a length, or choose a Jumper type if this is a short '
                 'box-to-box link.',
+            )
+        return cleaned
+
+
+class PACableLinkForm(forms.ModelForm):
+    """One daisy-chain link, in the Links inline on a PA cable run.
+
+    The same length rule as the run's: a jumper type has no length, every
+    other type needs one. ``order`` is hidden; pa_cable_links.js writes each
+    row's position into it on submit, and the admin renumbers after saving.
+    """
+
+    class Meta:
+        model = PACableLink
+        fields = ('order', 'quantity', 'cable', 'length', 'note')
+        widgets = {
+            'order': forms.HiddenInput(),
+            'quantity': forms.NumberInput(attrs={'min': 1, 'style': 'width: 60px;'}),
+            'length': forms.NumberInput(attrs={'min': 1, 'style': 'width: 70px;'}),
+            'note': forms.TextInput(attrs={'style': 'width: 220px;'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'cable' in self.fields:
+            self.fields['cable'].widget.attrs[JumperLengthMixin.JUMPER_DATA_ATTR] = (
+                json.dumps(sorted(pa_cable_math.jumper_type_values())))
+        if 'order' in self.fields:
+            self.fields['order'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        if 'cable' not in self.fields:
+            return cleaned
+        if not cleaned.get('order'):
+            cleaned['order'] = 0
+        if pa_cable_math.is_jumper(cleaned.get('cable')):
+            # Ordered by quantity. Nothing is posted for the hidden input,
+            # and nothing is stored either.
+            cleaned['length'] = None
+            self.errors.pop('length', None)
+        elif cleaned.get('length') in (None, '') and 'length' not in self.errors:
+            self.add_error(
+                'length',
+                'Enter this link\'s length, or choose a Jumper type.',
             )
         return cleaned
 

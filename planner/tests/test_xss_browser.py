@@ -269,6 +269,37 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, '#result_list td.field-arrays_col .cb-array', NAME, 'Arrays column')
         self.assert_text(page, '#result_list .field-cable_label_col', '<b>HL', 'Cable Label')
 
+    def test_a_link_note_on_the_pa_cable_form_and_the_speaker_cables_tab(self):
+        # pa_cable_links.js dresses each link row and swaps two rows' values
+        # for a reorder; the wiring page prints the note in the run's label.
+        from planner.models import AmpLocation, PACableLink, PACableSchedule
+        rack = AmpLocation.objects.create(project=self.project, name='SL Racks')
+        run = PACableSchedule.objects.create(project=self.project, amp_location=rack,
+                                             destination='K2 Left', cable='NL_8', length=75)
+        for order, note in ((1, NAME), (2, QUOTED)):
+            PACableLink.objects.create(cable_schedule=run, order=order, cable='NL_4',
+                                       length=25, note=note)
+        page = self.open(reverse('admin:planner_pacableschedule_change', args=[run.pk]))
+        page.wait_for_selector('#links-group .pa-link-pos')
+        self.assertEqual(page.input_value('[name="links-0-note"]'), NAME)
+        self.assertEqual(page.input_value('[name="links-1-note"]'), QUOTED)
+        page.locator('#links-group tbody tr.form-row').nth(1).locator('.pa-link-move').first.click()
+        self.assertEqual(page.input_value('[name="links-0-note"]'), QUOTED)
+        self.assertEqual(page.input_value('[name="links-1-note"]'), NAME)
+        page.click('#pa-linked-toggle')                       # off: the "will be removed" line
+        self.assert_text(page, '.pa-links-off-note', 'These 2 links', 'links off note')
+        page.click('#pa-linked-toggle')
+        self.assert_text(page, '#links-group .pa-link-pos', 'Spk 1', 'link rows')
+
+        page = self.open(reverse('admin:planner_pacableschedule_changelist'))
+        self.assert_text(page, '#result_list td.field-links_col .cb-link', 'NL 4', 'Links column')
+
+        # Two notes this long do not fit on the line: the run is keyed and
+        # the Connections table prints its label in full.
+        page = self.open(reverse('planner:wiring_diagram') + '?view=speakers')
+        self.assert_text(page, 'tr[data-key] td', NAME, 'speaker cables tab: Connections table')
+        self.assert_text(page, 'tr[data-key] td', QUOTED, 'speaker cables tab: Connections table')
+
     # -- Amp input pickers ------------------------------------------------------
 
     def test_names_in_the_amp_input_pickers_and_link_tooltip(self):
