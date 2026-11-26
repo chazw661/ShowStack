@@ -20,8 +20,8 @@ the first place.
 
 Making the model-less amp *saveable* then exposes everywhere else that read the
 FK bare, which is why this file also covers the change form rendering, the
-channel inline and the dashboard. Those were latent before: unreachable only
-because the row they needed could not exist.
+channel inline and the dashboard (since retired). Those were latent before:
+unreachable only because the row they needed could not exist.
 
 Run with::
 
@@ -249,29 +249,6 @@ class ChannelInlineFormTests(_AmpMixin, TestCase):
                               dj_forms.HiddenInput)
         self.assertNotIsInstance(form.fields['aes_input'].widget,
                                  dj_forms.HiddenInput)
-
-
-class DashboardTests(_AmpMixin, TestCase):
-    """``total_amp_channels`` summed ``a.amp_model.channel_count`` bare.
-
-    The widest blast radius of the latent set: the sum is not scoped to a
-    project, so one model-less amp anywhere would have taken down the
-    dashboard for every logged-in user.
-    """
-
-    URL = '/audiopatch/dashboard/'
-
-    def test_it_renders_with_a_model_less_amp_present(self):
-        self.add_amp()
-        self.assertEqual(self.client.get(self.URL).status_code, 200)
-
-    def test_the_channel_count_skips_it_and_totals_the_rest(self):
-        self.add_amp()                                   # contributes 0
-        self.add_amp(name='with model', amp_model=self.model)   # contributes 4
-        response = self.client.get(self.URL)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['total_amp_channels'], 4)
-        self.assertEqual(response.context['total_amps'], 2)
 
 
 class ProjectDuplicationTests(_AmpMixin, TestCase):
