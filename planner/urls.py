@@ -1,7 +1,6 @@
 from django.urls import path
 from . import views
 from django.contrib import admin
-from planner.views import SystemDashboardView
 from django.urls import path, include
 from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_all_locations_pdf
 from planner.utils.pdf_exports.system_report import export_system_report
@@ -150,7 +149,6 @@ urlpatterns = [
 
     # Dashboard
     path('admin/', admin.site.urls),
-    path('dashboard/', SystemDashboardView.as_view(), name='system-dashboard'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard_stats'),
     
     # ADD THESE MIC TRACKER URLs

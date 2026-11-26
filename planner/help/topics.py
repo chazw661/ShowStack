@@ -805,7 +805,6 @@ TOPICS = (
         summary='Whole-project overview at a glance, plus the one-PDF Complete System Report.',
         pages=(
             'admin:index',
-            'planner:system-dashboard',
         ),
         keywords=('system overview', 'system report', 'system pdf', 'dashboard', 'home', 'complete system report', 'print', 'qr', 'mobile',),
     ),

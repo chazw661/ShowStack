@@ -77,13 +77,11 @@ class SidebarAndLinksTests(SingleEntryBase):
         self.assertIn(f'href="{reverse(CALCULATOR)}"', html)
         self.assertNotIn('href="/admin/planner/powerdistributionplan/"', html)
 
-    def test_dashboard_and_admin_home_link_the_calculator(self):
+    def test_admin_home_links_the_calculator(self):
         self.use(self.user_a)
-        for name in ('planner:system-dashboard', 'admin:index'):
-            with self.subTest(page=name):
-                html = self.client.get(reverse(name)).content.decode()
-                self.assertIn(f'href="{reverse(CALCULATOR)}"', html)
-                self.assertNotIn('/admin/planner/powerdistributionplan/', html)
+        html = self.client.get(reverse('admin:index')).content.decode()
+        self.assertIn(f'href="{reverse(CALCULATOR)}"', html)
+        self.assertNotIn('/admin/planner/powerdistributionplan/', html)
 
 
 class AdminListAccessTests(SingleEntryBase):

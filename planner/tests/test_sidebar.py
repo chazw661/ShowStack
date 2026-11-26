@@ -270,15 +270,6 @@ class WiringDiagramOnTheDashboards(SidebarBase):
                 self.assertEqual(
                     200, self.client.get(reverse('planner:dashboard_stats')).status_code)
 
-    def test_system_dashboard_quick_action_follows_pa_cables(self):
-        # The page with the quick actions is the System Dashboard,
-        # /audiopatch/dashboard/. (/dashboard/ is the project list.)
-        with self.no_graph():
-            html = self.page('editor', reverse('planner:system-dashboard')).content.decode()
-        action = html.index('<a href="%s" class="quick-action">' % self.url)
-        self.assertLess(html.index('PA Cables'), action)
-        self.assertLess(action, html.index('<a href="/admin/planner/commbeltpack/" class="quick-action">'))
-
     def test_the_card_opens_the_overview(self):
         response = self.page('viewer', self.url)
         self.assertEqual('overview', response.context['tab'])

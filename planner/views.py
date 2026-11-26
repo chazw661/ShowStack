@@ -533,75 +533,7 @@ def import_comm_names(request):
     return JsonResponse({'success': False, 'message': 'Invalid request'})      
 
 
-#-----Comm Dashboard View------
-
-# planner/views.py (create this file if it doesn't exist)
-
-
-
-class SystemDashboardView(LoginRequiredMixin, View):
-    """System overview for the *current project*.
-
-    Issue #100 (a): every count here used to be a global `.objects.count()`,
-    so each tenant's dashboard reported the whole install's equipment --
-    console and device counts, I/O totals, processor and belt-pack counts,
-    amp and channel totals, cable runs and total cable length. No names, but
-    the aggregate size of every other customer's rig.
-
-    Each count now runs through `scope_queryset`, which filters to the
-    accessible current project and returns `none()` when there isn't one --
-    so "no project selected" shows zeros rather than everything.
-    """
-
-    def get(self, request):
-        def scoped(model, path='project'):
-            return scope_queryset(request, model.objects.all(), path)
-
-        devices = scoped(Device)
-        amps = scoped(Amp).select_related('amp_model')
-        beltpacks = scoped(CommBeltPack)
-        processors = scoped(SystemProcessor)
-        positions_count = scoped(CommPosition).count()
-        cables = scoped(PACableSchedule)
-
-        context = {
-            # System Status Overview
-            'console_count': scoped(Console).count(),
-            'device_count': devices.count(),
-            'total_inputs': sum(d.input_count for d in devices),
-            'total_outputs': sum(d.output_count for d in devices),
-
-            # Processor Status
-            'p1_processors': processors.filter(device_type='P1').count(),
-            'galaxy_processors': processors.filter(device_type='GALAXY').count(),
-
-            # COMM System Status
-            'wireless_beltpacks': beltpacks.filter(system_type='WIRELESS').count(),
-            'hardwired_beltpacks': beltpacks.filter(system_type='HARDWIRED').count(),
-            'checked_out': beltpacks.filter(checked_out=True).count(),
-            'positions_configured': positions_count > 0,
-
-            # Amp Status
-            'total_amps': amps.count(),
-            # An amp awaiting a model contributes no channels rather
-            # than taking the whole dashboard down with it.
-            'total_amp_channels': sum(
-                a.amp_model.channel_count for a in amps if a.amp_model_id
-            ),
-
-            # Cable Statistics
-            'total_cable_runs': cables.count(),
-            'total_cable_length': sum(c.total_cable_length for c in cables),
-
-            # Setup Warnings
-            'needs_comm_setup': positions_count == 0,
-            'no_devices': devices.count() == 0,
-        }
-        return render(request, 'planner/dashboard.html', context)
-    
-
-
-    #--------Mic Tracker Sheet---
+#--------Mic Tracker Sheet---
 
    
 

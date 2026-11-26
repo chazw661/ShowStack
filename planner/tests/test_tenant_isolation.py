@@ -385,24 +385,6 @@ class AdminDropdownScopingTests(TenantIsolationBase):
 class DashboardScopingTests(TenantIsolationBase):
     """#100 (a): the per-tenant counts that were not per-tenant."""
 
-    def test_system_dashboard_counts_only_current_project(self):
-        resp = self.client.get(reverse('planner:system-dashboard'))
-        self.assertEqual(200, resp.status_code)
-        ctx = resp.context
-        self.assertEqual(1, ctx['console_count'], 'console_count spans tenants')
-        self.assertEqual(1, ctx['device_count'], 'device_count spans tenants')
-        self.assertEqual(1, ctx['total_amps'], 'total_amps spans tenants')
-        self.assertEqual(
-            1, ctx['wireless_beltpacks'], 'wireless_beltpacks spans tenants',
-        )
-        self.assertEqual(
-            1, ctx['p1_processors'], 'p1_processors spans tenants',
-        )
-        self.assertEqual(
-            self.amp_model.channel_count, ctx['total_amp_channels'],
-            'total_amp_channels sums every tenant\'s amps',
-        )
-
     def test_project_dashboard_lists_only_the_owners_projects(self):
         """/dashboard/ is accounts.views.dashboard, the project list.
 
@@ -423,6 +405,20 @@ class DashboardScopingTests(TenantIsolationBase):
         self.assertEqual([], list(resp.context['member_projects']))
         self.assertContains(resp, 'Project A')
         self.assertNoLeak(resp, '/dashboard/')
+
+    def test_system_dashboard_is_retired(self):
+        """/audiopatch/dashboard/ (SystemDashboardView) is gone: nothing
+        linked to it. Its stats live on the admin index (dashboard_stats)."""
+        from django.urls import NoReverseMatch
+        from planner import views
+        self.assertEqual(404, self.client.get('/audiopatch/dashboard/').status_code)
+        self.assertEqual(404, self.client.get('/audiopatch/dashboard').status_code)
+        self.assertFalse(hasattr(views, 'SystemDashboardView'))
+        with self.assertRaises(NoReverseMatch):
+            reverse('planner:system-dashboard')
+        # the JSON behind the admin-index cards is a different route and stays
+        self.assertEqual(
+            200, self.client.get('/audiopatch/dashboard/stats/').status_code)
 
     def test_legacy_planner_dashboard_view_is_gone(self):
         from planner import views
@@ -851,7 +847,7 @@ class OwnProjectStillWorksTests(TenantIsolationBase):
     def test_owner_pages_still_render(self):
         """A smoke pass over the pages the fixes touched most."""
         broken = []
-        for name in ('system-dashboard', 'dashboard_stats', 'predictions_list',
+        for name in ('dashboard_stats', 'predictions_list',
                      'comm_config_list_templates'):
             resp = self.client.get(reverse(f'planner:{name}'))
             if resp.status_code != 200:
