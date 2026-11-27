@@ -44,6 +44,13 @@ names the far end -- so either end reads without tracing the line:
            run's cable; ``label`` is the same on one line. ``to_ports`` are
            the far ports alone, for the diagram's Connections table.
 
+A device named on another box (a far-end label, a slot's "← source") goes by
+``unique_names``: its label, or, when another device of its kind (console,
+I/O or comm device, processor, amp) has the same one, the label lengthened as the pickers lengthen an entry
+(``sources.disambiguate``): "Rack 1 - Amp 1 (PA Left)", then "(PA Left,
+10.0.0.5)", then "(duplicate device)". Such a node carries it as ``name``;
+its ``label`` (the box title) is unchanged.
+
 A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2
 +NL4 25' ×1" (the Cable Label, count, cable type, length, fan-outs, each
 fan-out's extensions). One run feeding
@@ -86,6 +93,7 @@ from itertools import groupby
 
 from planner.connections import endpoints as ep
 from planner.connections import matchers as m
+from planner.connections import sources
 
 SCHEMA = 1
 CONFIRMED, INFERRED = 'confirmed', 'inferred'
@@ -180,6 +188,7 @@ def _feed_label(field, text):
 SLOT_PREFIX = {'avb': 'AVB', 'analog': 'XLR', 'aes': 'AES'}   # rack view's row order
 PHYSICAL = {'aes': 'AES', 'analog': 'Analog'}
 PROCESSOR_OUTPUTS = ('p1output', 'galaxyoutput')
+NAMED_KINDS = (ep.CONSOLE, ep.DEVICE, ep.PROCESSOR, ep.AMP)
 IO_PORTS = ('deviceinput', 'deviceoutput')
 
 
@@ -200,7 +209,22 @@ def _physical(link, port):
     return label
 
 
-def _amp_source(link, index, extra_nodes):
+def unique_names(index):
+    """{node id: the name a label on another box uses for it}. Two devices
+    with one name are told apart the way the pickers do it
+    (``sources.disambiguate``): by location -- "Rack 1 - Amp 1 (PA Left)" --
+    then IP, and "(duplicate device)" when still alike. Compared within a
+    kind: a console and a stage box of one name have ports that tell them
+    apart ("FOH Ch 3", "FOH Out 3")."""
+    nodes = [n for n in index.nodes.values() if n.kind in NAMED_KINDS]
+    entries = sources.disambiguate([
+        sources.Source(n.kind, n.id, n.kind, n.label,
+                       location=(n.location or {}).get('name', ''), ip=n.ip)
+        for n in nodes])
+    return {n.id: e.text for n, e in zip(nodes, entries)}
+
+
+def _amp_source(link, index, extra_nodes, names):
     """Where an input's feed comes from, in full: "Y001 Analog Out 3 (Left)",
     "SL P1 stream 3 (L Main)", or the typed text when it names nothing."""
     port = link.from_port
@@ -209,8 +233,7 @@ def _amp_source(link, index, extra_nodes):
         if not text:
             text = extra_nodes.get(link.from_node, {}).get('label', '')
         return f'“{text}” (not linked)'
-    node = index.nodes.get(port.node)
-    owner = node.label if node else ''
+    owner = names.get(port.node, '')
     if port.label.prefix == 'AVB':
         where = f'{owner} stream {port.label.number}'
     else:
@@ -219,9 +242,9 @@ def _amp_source(link, index, extra_nodes):
     return f'{where} ({name})' if name else where
 
 
-def _amp_slot_label(transport, labels, link, index, extra_nodes):
+def _amp_slot_label(transport, labels, link, index, extra_nodes, names):
     first = min(labels, key=_sort_key)
-    source = _amp_source(link, index, extra_nodes)
+    source = _amp_source(link, index, extra_nodes, names)
     channels = _runs(sorted(labels, key=_sort_key))
     if transport == 'avb':
         return f'AVB ← {source} · {channels}'
@@ -229,11 +252,12 @@ def _amp_slot_label(transport, labels, link, index, extra_nodes):
     return f'{label} · {channels}' if len(labels) > 1 else label
 
 
-def _slots(links, index, extra_nodes=None):
+def _slots(links, index, extra_nodes=None, names=None):
     """Give every drawn link that ends on a port its ``to_slot`` and
     ``far``; returns {node id: [{'id', 'label'}]}, each node's slots in input
     order. Every slot names its port and what feeds it ("← source")."""
     extra_nodes = extra_nodes or {}
+    names = unique_names(index) if names is None else names
     kinds = {nid: n.kind for nid, n in index.nodes.items()}
     by_source = defaultdict(list)       # amp: (amp, transport, source) -> links
     by_port = defaultdict(list)         # processor: (node, input port ref) -> links
@@ -255,14 +279,14 @@ def _slots(links, index, extra_nodes=None):
                      link.unlinked, link.b)].append(link)
     for (node, slot), group in by_port.items():
         port = group[0].to_port.label
-        sources = list(dict.fromkeys(_amp_source(l, index, extra_nodes) for l in group))
+        sources = list(dict.fromkeys(_amp_source(l, index, extra_nodes, names) for l in group))
         named[node][slot] = (_sort_key(port), f"{port} ← {', '.join(sources)}")
     for (node, frm, status, network, unlinked, b), group in by_line.items():
         slot = 'in:' + '|'.join(str(x) for x in (frm, status, int(network), int(unlinked), int(b)))
         for link in group:
             link.to_slot = slot
         first = min((l.to_port.label for l in group), key=_sort_key)
-        named[node][slot] = (_sort_key(first), _line_slot_label(group, index))
+        named[node][slot] = (_sort_key(first), _line_slot_label(group, names))
     channels = defaultdict(set)         # (amp, slot id) -> channel labels
     feeder = {}                         # (amp, slot id) -> a link of the source feeding it
     for (amp, transport, _), group in by_source.items():
@@ -282,7 +306,7 @@ def _slots(links, index, extra_nodes=None):
     for (amp, slot), labels in channels.items():
         transport, number = slot.split(':', 1)
         first = min(labels, key=_sort_key)
-        label = _amp_slot_label(transport, labels, feeder[(amp, slot)], index, extra_nodes)
+        label = _amp_slot_label(transport, labels, feeder[(amp, slot)], index, extra_nodes, names)
         order = prefixes.index(transport) if transport in prefixes else len(prefixes)
         named[amp][slot] = ((order,) + _sort_key(first), label)
     return {node: [{'id': slot, 'label': label}
@@ -290,7 +314,7 @@ def _slots(links, index, extra_nodes=None):
             for node, slots in named.items()}
 
 
-def _line_slot_label(links, index):
+def _line_slot_label(links, names):
     """A console's or an I/O device's input slot, for one line into it:
     "Ch 1–16, 33 ← Y001 In 1–17", "Out 5, 20 ← FOH Aux 23; Out 1–4 ← FOH Mtx
     1–4" (one phrase per kind of port), a B link's "Ch 3 (B) ← Y001 In 5"."""
@@ -302,8 +326,7 @@ def _line_slot_label(links, index):
             froms.append(source)
         if link.to_port.label not in tos:
             tos.append(link.to_port.label)
-    node = index.nodes.get(links[0].from_node)
-    owner = node.label if node else ''
+    owner = names.get(links[0].from_node, '')
     b = ' (B)' if links[0].b else ''
     return '; '.join(
         ' ← '.join(x for x in (f'{_runs(tos)}{b}', ' '.join(y for y in (owner, _runs(froms)) if y)) if x)
@@ -724,7 +747,8 @@ def project_graph(project, index=None, matches=None):
     g.rule_a(matches.a)
     g.rule_b(matches.b)
     g.rule_c(matches.c)
-    slots = _slots(g.links, index, g.extra_nodes)
+    unique = unique_names(index)
+    slots = _slots(g.links, index, g.extra_nodes, unique)
 
     nodes = {nid: _node_json(n) for nid, n in index.nodes.items()
              if n.kind in ep.DEVICE_KINDS}
@@ -736,9 +760,12 @@ def project_graph(project, index=None, matches=None):
             counts[side] += 1
     for node_id, node_slots in slots.items():
         nodes[node_id]['slots'] = node_slots
+    for node_id, name in unique.items():
+        if name != nodes[node_id]['label']:     # only a name another device shares
+            nodes[node_id]['name'] = name
     nodes.update(g.extra_nodes)
     slot_order = {(nid, s['id']): i for nid, ss in slots.items() for i, s in enumerate(ss)}
-    names = {nid: n.get('label', '') for nid, n in nodes.items()}
+    names = {nid: n.get('name') or n.get('label', '') for nid, n in nodes.items()}
     kinds = {nid: n.get('kind') for nid, n in nodes.items()}
     out_slots = defaultdict(dict)       # node -> {from_slot: (key, lines)}
 

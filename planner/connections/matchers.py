@@ -156,6 +156,7 @@ class Node:
     label: str
     location: dict | None = None
     extra: dict = field(default_factory=dict)
+    ip: str = ''        # tells two same-named devices apart (graph.unique_names); not in the JSON
 
 
 @dataclass
@@ -269,7 +270,7 @@ class ProjectIndex:
         for c in (Console.objects.filter(project_id=pid, is_template=False)
                   .select_related('location')):
             self._add(Node(ep.node_id(ep.CONSOLE, c.pk), ep.CONSOLE, c.name,
-                           _location(c.location), _ips(c)))
+                           _location(c.location), _ips(c), c.primary_ip_address or ''))
         for d in Device.objects.filter(project_id=pid).select_related('location'):
             self._add(Node(ep.node_id(ep.DEVICE, d.pk), ep.DEVICE, d.name,
                            _location(d.location),
@@ -277,16 +278,19 @@ class ProjectIndex:
                             # only when set, so a project with neither reads as before
                             **({'device_kind': d.kind} if d.kind != Device.IO else {}),
                             **({'dante_network': d.dante_network.strip()}
-                               if d.dante_network.strip() else {})}))
+                               if d.dante_network.strip() else {})},
+                           d.primary_ip_address or ''))
         for p in SystemProcessor.objects.filter(project_id=pid).select_related('location'):
             node = self._add(Node(ep.node_id(ep.PROCESSOR, p.pk), ep.PROCESSOR, p.name,
-                                  _location(p.location), {'device_type': p.device_type}))
+                                  _location(p.location), {'device_type': p.device_type},
+                                  p.ip_address or ''))
             if norm(p.name):
                 self.processor_names[norm(p.name)].add(node.id)
         for a in Amp.objects.filter(project_id=pid).select_related('location', 'amp_model'):
             self._add(Node(ep.node_id(ep.AMP, a.pk), ep.AMP, a.name,
                            _location(a.location, ep.AMP_LOCATION),
-                           {'model': str(a.amp_model) if a.amp_model_id else ''}))
+                           {'model': str(a.amp_model) if a.amp_model_id else ''},
+                           a.ip_address or ''))
         for loc in AmpLocation.objects.filter(project_id=pid):
             node = self._add(Node(ep.node_id(ep.AMP_LOCATION, loc.pk), ep.AMP_LOCATION,
                                   loc.name, extra={'sort_order': loc.sort_order}))
