@@ -7,11 +7,19 @@ script, no external references; the styles are inline so the file stands on
 its own. Nothing is shortened: ``layout`` has wrapped every text into lines,
 and a line or tspan is drawn per line. Each box and line keeps its full text
 in a ``<title>``, the hover tooltip.
+
+A tab drawn as trunks (``Layout.trunks``): each trunk's pieces are one
+``<g class="wd-trunk">``, its badges one ``<g class="wd-badges">``, drawn
+over every line; a branch's ``wd-link`` holds its arrowhead and label only.
+Everything of one trunk -- those, its port name and its receivers' slot
+names -- carries ``data-stream`` (the trunk's number, never user text) and
+its colour's class (``wd-s1``…), so the page can light one stream and dim
+the rest.
 """
 from html import escape
 
 from planner.connections.layout import (BOX_W, COLUMN_HINTS, GROUP_HEAD, HINT_Y, KEY_PAD, LABEL_LH,
-                                        LINE_H, MARGIN, SLOT_LH, TITLE_Y)
+                                        LINE_H, MARGIN, SLOT_LH, STREAM_COLOURS, TITLE_Y)
 
 COMMS_HREF = '?view=comms'     # where a box's comms note links to
 
@@ -42,7 +50,17 @@ STYLE = """
 .wd-end { fill: #2b4c7e; }
 .wd-key rect { fill: #ffffff; stroke: #1f2d3d; stroke-width: 1.2; }
 .wd-key text { font: 700 11px system-ui, -apple-system, sans-serif; fill: #111; }
-"""
+.wd-trunk .wd-edge { stroke-width: 1.8; }
+.wd-badge rect { stroke-width: 1.4; }
+.wd-badge text { font: 700 9px system-ui, -apple-system, sans-serif; fill: #fff; text-anchor: middle; }
+.wd-badge.hollow rect { fill: #fff; }
+.wd-box .p[data-stream] { font-weight: 600; }
+""" + ''.join(
+    f'.wd-s{i} .wd-edge, .wd-s{i} .wd-badge rect {{ stroke: {c}; }}\n'
+    f'.wd-s{i} .wd-end, .wd-s{i} .wd-label, .wd-s{i} .wd-badge.hollow text, '
+    f'.wd-box .p.wd-s{i} {{ fill: {c}; }}\n'
+    f'.wd-s{i} .wd-badge:not(.hollow) rect {{ fill: {c}; }}\n'
+    for i, c in enumerate(STREAM_COLOURS, 1))
 
 
 def _e(value):
@@ -66,25 +84,33 @@ def _lines(lines, x, line_h):
     return ''.join(out)
 
 
-def _slots(box):
+def _stream(trunk):
+    """(class, attribute) of anything that is part of ``trunk``; ('', '') for None."""
+    if trunk is None:
+        return '', ''
+    return f' wd-s{trunk.colour + 1}', f' data-stream="{trunk.n}"'
+
+
+def _slots(box, trunks):
     """Every port name in the box: left-aligned where a line arrives,
     right-aligned (``data-side="out"``) where one leaves."""
     out = []
-    for anchor, x, y, lines, label in box.port_texts():
+    for (anchor, x, y, lines, label), n in zip(box.port_texts(), box.port_streams()):
         side = ' data-side="out" text-anchor="end"' if anchor == 'end' else ''
-        out.append(f'<text class="p" data-slot="{_e(label)}"{side} x="{_n(x)}" y="{_n(y)}">'
+        cls, attr = _stream(trunks.get(n))
+        out.append(f'<text class="p{cls}"{attr} data-slot="{_e(label)}"{side} x="{_n(x)}" y="{_n(y)}">'
                    f'{_lines(lines, x, SLOT_LH)}</text>')
     return ''.join(out)
 
 
-def _box(box):
+def _box(box, trunks):
     x = box.x + 8
     return (
         f'<g class="wd-box {_e(box.style)}" data-node="{_e(box.node)}" data-box="{_e(box.id)}">'
         f'<title>{_e(box.label)}</title>'
         f'<rect x="{_n(box.x)}" y="{_n(box.y)}" width="{_n(box.w)}" height="{_n(box.h)}" rx="4"/>'
         + _text_rows(box, x) +
-        f'{_slots(box)}'
+        f'{_slots(box, trunks)}'
         '</g>')
 
 
@@ -100,12 +126,36 @@ def _text_rows(box, x):
     return ''.join(plain)
 
 
-def _route(route):
+def _trunk(trunk):
+    cls, attr = _stream(trunk)
+    lines = ''.join(
+        f'<line class="wd-edge{" b" if faded else ""}" x1="{_n(x0)}" y1="{_n(y0)}" '
+        f'x2="{_n(x1)}" y2="{_n(y1)}"/>' for x0, y0, x1, y1, faded in trunk.lines)
+    title = ' · '.join(x for x in (trunk.port, trunk.label) if x)
+    return f'<g class="wd-trunk{cls}"{attr}><title>{_e(title)}</title>{lines}</g>'
+
+
+def _badges(trunk):
+    cls, attr = _stream(trunk)
+    out = []
+    for badge in trunk.badges:
+        x0, y0, x1, y1 = badge.box
+        out.append(
+            f'<g class="wd-badge{"" if badge.filled else " hollow"}" data-tap="{_e(badge.edge)}">'
+            f'<rect x="{_n(x0)}" y="{_n(y0)}" width="{_n(x1 - x0)}" height="{_n(y1 - y0)}" '
+            f'rx="{_n((y1 - y0) / 2)}"/>'
+            f'<text x="{_n(badge.x)}" y="{_n(badge.y + 3.2)}">{_e(badge.text)}</text></g>')
+    return f'<g class="wd-badges{cls}"{attr}>{"".join(out)}</g>'
+
+
+def _route(route, trunks):
+    trunk = trunks.get(route.trunk)
+    cls, attr = _stream(trunk)
     path = ' '.join(f'{"M" if i == 0 else "L"}{_n(x)} {_n(y)}' for i, (x, y) in enumerate(route.points))
     end_x, end_y = route.points[-1]
     classes = ' '.join(route.classes)
     label = ''
-    if route.key:
+    if route.badge:
         # A boxed badge on the line itself, drawn over it, next to the source box.
         x0, y0, x1, y1 = route.badge
         label = (f'<g class="wd-key"><rect x="{_n(x0)}" y="{_n(y0)}" width="{_n(x1 - x0)}" '
@@ -117,10 +167,12 @@ def _route(route):
         top = route.label_y - (len(route.lines) - 1) * LABEL_LH
         label = (f'<text class="wd-label {_e(classes)}" x="{_n(route.label_x)}" y="{_n(top)}">'
                  f'{_lines(route.lines, route.label_x, LABEL_LH)}</text>')
+    # A trunk's branch: the line is the trunk's (``_trunk``), drawn once.
+    line = '' if trunk else f'<path class="wd-edge {_e(classes)}" d="{path}"/>'
     return (
-        f'<g class="wd-link" data-edge="{_e(route.id)}">'
+        f'<g class="wd-link{cls}"{attr} data-edge="{_e(route.id)}">'
         f'<title>{_e(route.label_full)}</title>'
-        f'<path class="wd-edge {_e(classes)}" d="{path}"/>'
+        f'{line}'
         f'<path class="wd-end" d="M{_n(end_x)} {_n(end_y)} l-6 -3.5 v7 z"/>'
         f'{label}'
         '</g>')
@@ -144,7 +196,10 @@ def render(lay, title=''):
                    f'{_lines(group.lines, group.x, LINE_H)}</text>'
                    f'<line class="wd-group-rule" x1="{_n(group.x)}" x2="{_n(group.x + BOX_W)}" '
                    f'y1="{_n(last + 4)}" y2="{_n(last + 4)}"/>')
-    out += [_route(r) for r in lay.routes]
-    out += [_box(b) for b in lay.boxes]
+    trunks = {t.n: t for t in lay.trunks}
+    out += [_route(r, trunks) for r in lay.routes]
+    out += [_trunk(t) for t in lay.trunks]
+    out += [_badges(t) for t in lay.trunks]
+    out += [_box(b, trunks) for b in lay.boxes]
     out.append('</svg>')
     return ''.join(out)

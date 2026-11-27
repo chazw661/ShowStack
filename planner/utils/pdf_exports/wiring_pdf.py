@@ -77,6 +77,9 @@ LEGEND = (
     ('? Not linked or ambiguous', ('unlinked',)),
     ('AVB / Dante network (no cable)', ('network',)),
 )
+TRUNK_LEGEND = 'One colour and name per stream'
+TAP_LEGEND = ('Confirmed', 'Inferred from labels')     # a filled badge, a hollow one
+NOT_LINKED_LEGEND = LEGEND[2]
 UNSET_LEGEND = ('Console connection not set', ('unset',))
 B_LEGEND = ('B input (lighter; labelled “(B)”)', ('b',))
 
@@ -122,6 +125,8 @@ def draw_text(c, x, y, text, font=REGULAR, size=9, color=INK, anchor='start', fi
         width = text_width(text, font, size)
     if anchor == 'end':
         x -= width
+    elif anchor == 'middle':
+        x -= width / 2
     t = c.beginText(x, y)
     t.setFillColor(color)
     for f, part in _runs(text, font):
@@ -163,17 +168,52 @@ def _stroke(c, style):
     c.setDash(*([list(style['dash']), 0] if style['dash'] else [[], 0]))
 
 
-def _draw_route(c, w, route):
+def stream_colour(trunk):
+    return colors.HexColor(L.STREAM_COLOURS[trunk.colour])
+
+
+def _draw_badge(c, x, y, half_w, half_h, text, colour, filled, size):
+    """A stream's name in its badge: filled, or hollow (an inferred tap)."""
+    c.setDash([], 0)
+    c.setStrokeColor(colour)
+    c.setFillColor(colour if filled else colors.white)
+    c.roundRect(x - half_w, y - half_h, 2 * half_w, 2 * half_h, half_h, stroke=1, fill=1)
+    draw_text(c, x, y - size * 0.36, text, BOLD, size, colors.white if filled else colour,
+              anchor='middle')
+
+
+def _draw_trunk(c, w, trunk):
+    """A trunk's pieces, each once, solid, in its colour."""
+    c.setStrokeColor(stream_colour(trunk))
+    c.setLineWidth(1.8 * w.s)
+    c.setDash([], 0)
+    for x0, y0, x1, y1, faded in trunk.lines:
+        c.setStrokeAlpha(0.45 if faded else 1)
+        c.line(w.x(x0), w.y(y0), w.x(x1), w.y(y1))
+    c.setStrokeAlpha(1)
+
+
+def _draw_badges(c, w, tile, trunk):
+    c.setLineWidth(1.4 * w.s)
+    for badge in trunk.badges:
+        if tile.holds(badge.x, badge.y):
+            x0, y0, x1, y1 = badge.box
+            _draw_badge(c, w.x(badge.x), w.y(badge.y), w.pt(x1 - x0) / 2, w.pt(y1 - y0) / 2,
+                        badge.text, stream_colour(trunk), badge.filled, w.pt(9))
+
+
+def _draw_route(c, w, route, trunk=None):
     style = _cascade(EDGE_STYLES, route.classes)
-    _stroke(c, style)
-    p = c.beginPath()
-    for i, (x, y) in enumerate(route.points):
-        (p.moveTo if i == 0 else p.lineTo)(w.x(x), w.y(y))
-    c.drawPath(p, stroke=1, fill=0)
+    if trunk is None:       # a trunk's branch: the line is the trunk's
+        _stroke(c, style)
+        p = c.beginPath()
+        for i, (x, y) in enumerate(route.points):
+            (p.moveTo if i == 0 else p.lineTo)(w.x(x), w.y(y))
+        c.drawPath(p, stroke=1, fill=0)
     ex, ey = route.points[-1]
     c.setStrokeAlpha(1)
     c.setDash([], 0)
-    c.setFillColor(LINE)
+    c.setFillColor(LINE if trunk is None else stream_colour(trunk))
     head = c.beginPath()
     head.moveTo(w.x(ex), w.y(ey))
     head.lineTo(w.x(ex - 6), w.y(ey - 3.5))
@@ -182,8 +222,8 @@ def _draw_route(c, w, route):
     c.drawPath(head, stroke=0, fill=1)
 
 
-def _draw_label(c, w, tile, route):
-    if route.key:
+def _draw_label(c, w, tile, route, trunk=None):
+    if route.badge:
         x0, y0, x1, y1 = route.badge
         if not tile.holds(x0, route.points[0][1]):
             return
@@ -201,11 +241,11 @@ def _draw_label(c, w, tile, route):
         y = route.label_y - (n - 1 - i) * L.LABEL_LH
         if tile.holds(route.label_x, y - 4):
             draw_text(c, w.x(route.label_x), w.y(y), line, style['font'], w.pt(11),
-                      colors.HexColor(style['fill']))
+                      colors.HexColor(style['fill']) if trunk is None else stream_colour(trunk))
     c.setFillAlpha(1)
 
 
-def _draw_box(c, w, tile, box):
+def _draw_box(c, w, tile, box, trunks=None):
     parts = tiling.box_regions(tile, box)
     if not parts:
         return
@@ -230,11 +270,13 @@ def _draw_box(c, w, tile, box):
                 draw_text(c, w.x(box.x + 8), w.y(y), line, REGULAR, w.pt(11), MUTED, fit=fit)
     # Port names: from the left edge where a line arrives, ending at the
     # right edge where one leaves.
-    for anchor, x, y, lines, _ in box.port_texts():
+    for (anchor, x, y, lines, _), n in zip(box.port_texts(), box.port_streams()):
+        trunk = (trunks or {}).get(n)
         for j, line in enumerate(lines):
             ly = y + j * L.SLOT_LH
             if shown(ly):
-                draw_text(c, w.x(x), w.y(ly), line, REGULAR, w.pt(10), LINE, anchor=anchor, fit=fit)
+                draw_text(c, w.x(x), w.y(ly), line, REGULAR if trunk is None else SEMIBOLD, w.pt(10),
+                          LINE if trunk is None else stream_colour(trunk), anchor=anchor, fit=fit)
 
 
 def _draw_columns(c, w, tile, lay):
@@ -297,8 +339,25 @@ def tile_marks(plan, crossings, pages):
     return out
 
 
-def _legend(c, x, y, show_unset, show_b=False):
+def _legend(c, x, y, show_unset, show_b=False, trunks=()):
     entries = list(LEGEND) + ([B_LEGEND] if show_b else []) + ([UNSET_LEGEND] if show_unset else [])
+    if trunks:
+        # A tab drawn as trunks: every line is solid, so the legend shows a
+        # stream and the two badges.
+        first = trunks[0]
+        colour = stream_colour(first)
+        c.setStrokeColor(colour)
+        c.setLineWidth(1.8)
+        c.line(x, y + 3, x + 24, y + 3)
+        draw_text(c, x + 30, y, TRUNK_LEGEND, REGULAR, 8, MUTED)
+        x += 30 + text_width(TRUNK_LEGEND, REGULAR, 8) + 18
+        for label, filled in zip(TAP_LEGEND, (True, False)):
+            half = max(5.5, text_width(first.label, BOLD, 7) / 2 + 2.5)
+            c.setLineWidth(1)
+            _draw_badge(c, x + half, y + 3, half, 5.5, first.label, colour, filled, 7)
+            draw_text(c, x + 2 * half + 6, y, label, REGULAR, 8, MUTED)
+            x += 2 * half + 6 + text_width(label, REGULAR, 8) + 18
+        entries = [NOT_LINKED_LEGEND] + ([B_LEGEND] if show_b else [])
     for label, classes in entries:
         style = _cascade(EDGE_STYLES, classes)
         _stroke(c, style)
@@ -345,7 +404,8 @@ class DiagramPage(Flowable):
         draw_text(c, 0, top - 31, self.view['tab_label'], SEMIBOLD, 11.5, NAVY)
         draw_text(c, text_width(self.view['tab_label'], SEMIBOLD, 11.5) + 12, top - 31,
                   '  ·  '.join(parts), REGULAR, 9, MUTED)
-        _legend(c, 0, top - 48, self.view['show_unset_legend'], self.view.get('show_b_legend'))
+        _legend(c, 0, top - 48, self.view['show_unset_legend'], self.view.get('show_b_legend'),
+                self.view['layout'].trunks)
         if self.plan.tiled:
             _locator(c, self.width, top, self.plan, self.tile)
 
@@ -354,13 +414,18 @@ class DiagramPage(Flowable):
         c.saveState()
         _clip(c, w, tile)
         c.setFillColor(colors.white)
+        trunks = {t.n: t for t in lay.trunks}
         for route in lay.routes:
-            _draw_route(c, w, route)
+            _draw_route(c, w, route, trunks.get(route.trunk))
+        for trunk in lay.trunks:
+            _draw_trunk(c, w, trunk)
+        for trunk in lay.trunks:
+            _draw_badges(c, w, tile, trunk)
         for route in lay.routes:
-            _draw_label(c, w, tile, route)
+            _draw_label(c, w, tile, route, trunks.get(route.trunk))
         _draw_columns(c, w, tile, lay)
         for box in lay.boxes:
-            _draw_box(c, w, tile, box)
+            _draw_box(c, w, tile, box, trunks)
         c.restoreState()
         for box, y in tile.continued:
             draw_text(c, w.x(box.x + 8), w.y(y) + 3, f'{box.label} (continued)', SEMIBOLD,

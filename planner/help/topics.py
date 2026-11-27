@@ -580,7 +580,7 @@ TOPICS = (
         pages=(
             'planner:wiring_diagram',
         ),
-        keywords=('wiring', 'tabs', 'dante', 'avb', 'milan', 'analogue', 'aes', 'speaker cables', 'console connection', 'twinlane', 'madi', 'network feeds', 'key', 'print',),
+        keywords=('wiring', 'tabs', 'dante', 'avb', 'milan', 'analogue', 'aes', 'speaker cables', 'console connection', 'twinlane', 'madi', 'network feeds', 'key', 'print', 'trunk', 'stream', 'highlight',),
     ),
     Topic(
         slug='pa-cable-fanouts-jumpers',

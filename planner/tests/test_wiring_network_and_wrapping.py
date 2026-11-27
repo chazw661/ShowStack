@@ -127,7 +127,8 @@ class NetworkToggleTests(NetworkShow, TestCase):
         for tab in ('dante', 'analog', 'speakers'):
             response = self.page(view=tab, network='0')
             self.assertNotContains(response, 'role="switch"')
-        self.assertIn('wd-edge confirmed network', svg_of(self.page(view='dante', network='0')))
+        # the Dante tab draws its links whatever the switch says (as a trunk)
+        self.assertIn('class="wd-trunk wd-s1"', svg_of(self.page(view='dante', network='0')))
 
     def test_the_tab_is_called_analogue_aes(self):
         response = self.page()

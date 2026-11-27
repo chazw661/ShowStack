@@ -489,6 +489,59 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assertIn('not linked', slots)          # the typed text that names no output
         self.assertEqual(0, page.evaluate("document.querySelectorAll('svg.wd-svg img, svg.wd-svg i').length"))
 
+    def test_stream_highlight_on_the_avb_tab_with_hostile_names(self):
+        # PR: network trunks. Two streams from a hostile processor to a
+        # hostile amp: hovering one lights it and dims the other, a tap keeps
+        # it, Escape clears. The script only reads data-stream (a number the
+        # server wrote) and toggles classes; every name is still text.
+        from planner.models import (Amp, AmpChannel, AmpLocation, Location, P1Output,
+                                    P1Processor, SystemProcessor)
+        proc = SystemProcessor.objects.create(
+            project=self.project, name=QUOTED, device_type='P1',
+            location=Location.objects.create(project=self.project, name=NAME))
+        P1Processor.objects.create(system_processor=proc)
+        outputs = P1Output.objects.filter(p1_processor__system_processor=proc, output_type='AVB')
+        outputs.filter(channel_number=1).update(label=NAME)
+        outputs.filter(channel_number=2).update(label=QUOTED)
+        amp = Amp.objects.create(project=self.project, name=NAME, location=AmpLocation.objects.create(
+            project=self.project, name=QUOTED))
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=1,
+                                            defaults={'avb_stream': f'AVB 1 - {NAME}'})
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=2,
+                                            defaults={'avb_stream': f'AVB 2 - {QUOTED}'})
+
+        page = self.open(reverse('planner:wiring_diagram') + '?view=avb')
+        page.wait_for_selector('svg.wd-svg .wd-trunk')
+        streams = page.evaluate(
+            "[...new Set([...document.querySelectorAll('svg.wd-svg [data-stream]')]"
+            ".map(e => e.getAttribute('data-stream')))]")
+        self.assertEqual(sorted(streams), ['1', '2'])
+        self.assert_text(page, 'svg.wd-svg .wd-badge text', '1', 'stream badge')
+        self.assert_text(page, 'svg.wd-svg .wd-trunk title', 'AVB Out 2 · 2', 'trunk tooltip')
+        self.assert_text(page, '.wd-legend .wd-tap', '1', 'legend badge')
+
+        focused = "document.querySelector('svg.wd-svg').classList.contains('wd-focus')"
+        lit = "[...new Set([...document.querySelectorAll('svg.wd-svg .wd-on')].map(e => e.getAttribute('data-stream')))]"
+        other = ("getComputedStyle(document.querySelector("
+                 "'svg.wd-svg .wd-trunk[data-stream=\"2\"]')).opacity")
+        self.assertFalse(page.evaluate(focused))
+        port = page.locator('svg.wd-svg text.p[data-side="out"][data-stream="1"]')
+        port.hover()
+        self.assertTrue(page.evaluate(focused))
+        self.assertEqual(page.evaluate(lit), ['1'])
+        self.assertEqual(page.evaluate(other), '0.15')
+        # the amp's slot fed by stream 1 is lit too, hostile name and all
+        self.assertTrue(page.evaluate(
+            "[...document.querySelectorAll('svg.wd-svg text.p.wd-on')].length >= 2"))
+        port.click()                                    # a tap keeps it
+        page.mouse.move(2, 2)
+        self.assertTrue(page.evaluate(focused))
+        self.assertEqual(page.evaluate(lit), ['1'])
+        page.keyboard.press('Escape')
+        self.assertFalse(page.evaluate(focused))
+        self.assertEqual(page.evaluate(other), '1')
+        self.assertEqual(0, page.evaluate("document.querySelectorAll('svg.wd-svg img, svg.wd-svg i').length"))
+
     def test_names_in_wrapped_titles_kept_slots_and_the_connections_table(self):
         # PR 3.3: a long hostile name wraps over several title lines; a label
         # too long to draw is a key whose row in the Connections table names

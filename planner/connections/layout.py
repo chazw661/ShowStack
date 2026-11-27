@@ -82,6 +82,27 @@ both ways is two boxes, left and right, and every route still runs rightward.
 
 ``Box.port_texts()`` is every port name of a box, placed and aligned; the
 screen, the PDF and the DXF all draw that one list.
+
+``layout(graph, trunks='T')`` is the Dante and AVB tabs: the lines leaving
+one source port (the same box and ``from_slot``) are one trunk, not a line
+each. They share one row in the source box, one lane through any column
+they skip and one vertical track, and a branch leaves the track for each
+receiver. ``Layout.trunks`` lists them, numbered down the page in tab order
+(``Trunk.n``); ``Trunk.colour`` is its place in STREAM_COLOURS, which repeats
+after the last. Its name (``Trunk.label``) is the edges' ``stream`` when the
+tab gave them one (the AVB tab: the real output number), else the prefix and
+its number ("T1"). The name is drawn in a badge at the top of the trunk and on
+every tap, filled where the link is confirmed and hollow where it is inferred,
+so a black-and-white print still reads; every line is solid. A trunk's routes
+keep their whole path in ``points`` (for the page cuts) but a renderer draws
+``Trunk.lines`` instead, each piece once, then each route's arrowhead and
+label. The labels of a trunk stack on its first run, a receiver after the
+other; one too wide is its "[n]" there, as text. A "?" edge is never a trunk:
+it is drawn as on any tab, without the ``network`` class (dashed, not dotted).
+A gap's tracks are put in the order that runs no line through another
+trunk's badge when there is one (``clear_order``).
+``Box.port_streams()`` is, for each of ``port_texts()``, the trunk it belongs
+to (its ``n``) or None.
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -116,6 +137,13 @@ TITLE_H = 42        # column titles, and the hint line under two of them
 TITLE_Y = 12        # a column title's baseline below MARGIN
 HINT_Y = 26         # its hint's baseline
 TRACK = 8           # between vertical tracks in a gap
+TRUNK_TRACK = 20    # ... on a tab drawn as trunks: room for the badges on them
+BADGE_R = 7         # a stream badge's half height
+BADGE_CHAR_W = 5.6  # bold 9px badge text
+# A trunk's colour: dark enough to read as 10px text on a box (4.5:1 or
+# better), apart from each other for protan, deutan and tritan eyes, and none
+# close to the diagram's own text or borders. ``test_wiring_trunks`` pins it.
+STREAM_COLOURS = ('#0B7C8C', '#8B1A1A', '#4D7A00', '#C2185B', '#3D2DB3', '#5B1E7A')
 LABEL_PAD = 10
 CHAR_W = 6.4        # 11px label text, a generous average
 TITLE_CHAR_W = 7.2  # 600 12px box titles
@@ -166,6 +194,9 @@ class Box:
     slot_side: list = field(default_factory=list)  # port-row mode: each row's 'in' / 'out' / 'both'
     out_text: list = field(default_factory=list)  # each output row's port name, wrapped ([] = none)
     out_top: float = 0          # output rows start this far below the head (under named inputs)
+    out_row: dict = field(default_factory=dict)  # trunks: segment -> the output row it shares
+    in_stream: dict = field(default_factory=dict)   # input slot index -> its trunk's number
+    out_stream: dict = field(default_factory=dict)  # output row index -> its trunk's number
 
     @property
     def dummy(self):
@@ -227,6 +258,14 @@ class Box:
         ``anchor`` 'start': drawn from ``x`` (a line arrives there); 'end':
         ending at ``x`` (a line leaves there). ``y`` is the first line's
         baseline, the rest SLOT_LH apart below it."""
+        return [port[:5] for port in self._ports()]
+
+    def port_streams(self):
+        """For each of ``port_texts()``, in order: the number of the trunk it
+        is an end of, or None."""
+        return [port[5] for port in self._ports()]
+
+    def _ports(self):
         left, right = self.x + PORT_PAD, self.x + self.w - PORT_PAD
         out = []
         for i, (label, lines) in enumerate(zip(self.slots, self.slot_lines)):
@@ -235,14 +274,14 @@ class Box:
             side = self.slot_side[i] if i < len(self.slot_side) else 'in'
             y = self.row_y(i) + PORT_DY
             if side != 'out':
-                out.append(('start', left, y, lines, label))
+                out.append(('start', left, y, lines, label, self.in_stream.get(i)))
             if side != 'in':
-                out.append(('end', right, y, lines, label))
+                out.append(('end', right, y, lines, label, self.in_stream.get(i)))
         for i, lines in enumerate(self.out_text):
             if lines:
                 # Stacked upward: the last line is on the row's own line.
                 y = self.out_row_y(i) + PORT_DY - SLOT_LH * (len(lines) - 1)
-                out.append(('end', right, y, lines, ' '.join(lines)))
+                out.append(('end', right, y, lines, ' '.join(lines), self.out_stream.get(i)))
         return out
 
     def slot_y(self, segment):
@@ -252,6 +291,8 @@ class Box:
             return self.row_y(self.in_slot.get(segment, self.ins.index(segment)))
         if segment in self.out_slot:
             return self.row_y(self.out_slot[segment])
+        if segment in self.out_row:
+            return self.out_row_y(self.out_row[segment])
         return self.out_row_y(self.outs.index(segment))
 
 
@@ -296,11 +337,13 @@ class Route:
     question: bool          # unlinked or ambiguous: drawn with "?"
     lines: list = field(default_factory=list)   # drawn, top to bottom; the last at label_y
     key: int | None = None  # drawn as "[key]", listed in the Connections table
+    trunk: int | None = None    # the trunk (its ``n``) this is a branch of: its line is the trunk's
 
     @property
     def badge(self):
-        """(x0, y0, x1, y1) of a key's badge, centred on the first run; else None."""
-        if not self.key:
+        """(x0, y0, x1, y1) of a key's badge, centred on the first run; else
+        None (a trunk's key is a line of its label, "[n]")."""
+        if not self.key or self.trunk:
             return None
         y = self.points[0][1]
         return (self.label_x, y - KEY_H / 2, self.label_x + key_width(self.key), y + KEY_H / 2)
@@ -308,12 +351,39 @@ class Route:
     def line_boxes(self):
         """[(x0, y0, x1, y1)] around each drawn line (a key: its badge), for
         overlap checks."""
-        if self.key:
+        if self.badge:
             return [self.badge]
         n = len(self.lines)
         return [(self.label_x, y - 9, self.label_x + text_width(line), y + 3)
                 for i, line in enumerate(self.lines)
                 for y in [self.label_y - (n - 1 - i) * LABEL_LH]]
+
+
+@dataclass
+class Badge:
+    x: float
+    y: float
+    text: str
+    filled: bool            # hollow: the tap of an inferred link
+    edge: str = ''          # the edge whose tap it is ('' at the top of the trunk)
+
+    @property
+    def box(self):
+        """(x0, y0, x1, y1): a circle for a short name, else a pill."""
+        half = max(BADGE_R, len(self.text) * BADGE_CHAR_W / 2 + 3)
+        return (self.x - half, self.y - BADGE_R, self.x + half, self.y + BADGE_R)
+
+
+@dataclass
+class Trunk:
+    n: int                  # 1.. down the page, in tab order
+    label: str              # its name: "T1", or the stream number the tab gave
+    colour: int             # index into STREAM_COLOURS
+    box: str                # the source box's id
+    port: str               # the source port, as its box names it
+    edges: list             # edge ids, in receiver order
+    lines: list = field(default_factory=list)   # [(x0, y0, x1, y1, faded)], each piece once
+    badges: list = field(default_factory=list)  # [Badge]
 
 
 @dataclass
@@ -325,6 +395,7 @@ class Layout:
     groups: list
     routes: list
     not_drawn: list = field(default_factory=list)   # edges that would run right to left
+    trunks: list = field(default_factory=list)      # [Trunk] (a tab drawn as trunks)
 
     @property
     def keys(self):
@@ -400,7 +471,9 @@ def _location_group(node):
 class _Builder:
     titles = COLUMN_TITLES
 
-    def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
+    def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, trunks=None):
+        self.trunk_prefix = trunks      # None: a line per edge
+        self.trunk_of = {}              # edge id -> (source box id, from_slot), its trunk
         self.hide_empty = hide_empty
         self.label_max = label_max
         self.graph = graph
@@ -513,7 +586,13 @@ class _Builder:
         self.hidden = {c for c in self.hide_empty
                        if c < len(self.columns) and not self.columns[c]}
         for edge, src, dst in self.edges:
-            chain = [src] + [self.box(f"{edge['id']}~{c}", label='', column=c, kind='dummy',
+            lane = edge['id']
+            if (self.trunk_prefix is not None and edge.get('from_slot')
+                    and not edge.get('unlinked') and not edge.get('ambiguous')):
+                # One trunk for all that leaves this port: one lane too.
+                self.trunk_of[edge['id']] = (src.id, edge['from_slot'])
+                lane = f"trunk:{src.id}:{edge['from_slot']}"
+            chain = [src] + [self.box(f"{lane}~{c}", label='', column=c, kind='dummy',
                                       style='dummy', h=SLOT)
                              for c in range(src.column + 1, dst.column)
                              if c not in self.hidden] + [dst]
@@ -575,19 +654,22 @@ class _Builder:
             rows = self.port_rows(box)
             if rows is not None:
                 self.name_rows(box, rows)
+                out_rows = [[seg] for seg in box.outs]
             else:
                 if named:
                     self.name_slots(box, named)
-                self.name_outs(box, node.get('out_slots') or ())
+                out_rows = self.name_outs(box, node.get('out_slots') or ())
             box.slot_lines = [wrap(label, TEXT_W, SLOT_CHAR_W) for label in box.slots]
             box.in_h = ([SLOT + SLOT_LH * (len(lines) - 1) for lines in box.slot_lines]
                         or [SLOT] * len(box.ins))
             box.out_h, box.out_line = [], []
-            for i, seg in enumerate(box.outs):
-                if seg.first and seg.edge['id'] in self.keys:
+            for i, row in enumerate(out_rows):
+                seg = row[0]
+                if seg.first and seg.edge['id'] in self.keys and seg.edge['id'] not in self.trunk_of:
                     h, line = KEY_ROW, KEY_LINE
                 else:
-                    lines = len(self.drawn_lines[seg.edge['id']]) if seg.first else 1
+                    # A trunk's row holds every receiver's label, stacked.
+                    lines = sum(len(self.drawn_lines[s.edge['id']]) for s in row) if seg.first else 1
                     h = SLOT + LABEL_LH * (max(lines, 1) - 1)
                     line = h - SLOT / 2
                 # Room above the line for a wrapped port name.
@@ -625,17 +707,28 @@ class _Builder:
         """The rows this box's lines leave from, in the graph's port order
         (``out_slots``); lines leaving the same ports are consecutive and the
         ports are named on the first only. A line with no source port (a PA
-        run) keeps its place after them, unnamed."""
+        run) keeps its place after them, unnamed. Returns the rows, each the
+        segments leaving on it: one, or all of a trunk's."""
         order = {slot['id']: i for i, slot in enumerate(named)}
         lines = {slot['id']: slot['lines'] for slot in named}
-        box.outs.sort(key=lambda s: order.get(s.edge.get('from_slot'), len(order)))
-        seen = set()
+        trunk = lambda s: self.trunk_of.get(s.edge['id'])
+        box.outs.sort(key=lambda s: (order.get(s.edge.get('from_slot'), len(order)),
+                                     trunk(s) is None))
+        rows = []
         for seg in box.outs:
-            slot = seg.edge.get('from_slot')
+            if rows and trunk(seg) is not None and trunk(rows[-1][0]) == trunk(seg):
+                rows[-1].append(seg)
+            else:
+                rows.append([seg])
+            box.out_row[seg] = len(rows) - 1
+        seen = set()
+        for row in rows:
+            slot = row[0].edge.get('from_slot')
             first = slot in lines and slot not in seen
             seen.add(slot)
             box.out_text.append([part for line in lines[slot]
                                  for part in wrap(line, TEXT_W, SLOT_CHAR_W)] if first else [])
+        return rows
 
     def name_slots(self, box, named):
         """The slots this box's lines use, in the graph's input order; a line
@@ -690,21 +783,64 @@ class _Builder:
             if c == len(self.columns) - 1:
                 break
             gap = [s for s in self.segments if s.from_box.column == c]
-            labels = [key_width(self.keys[s.edge['id']]) if s.edge['id'] in self.keys
+            labels = [key_width(self.keys[s.edge['id']])
+                      if s.edge['id'] in self.keys and s.edge['id'] not in self.trunk_of
                       else text_width(line)
                       for s in gap if s.first for line in self.drawn_lines[s.edge['id']]]
             label_zone = (max(labels) + 2 * LABEL_PAD) if labels else LABEL_PAD
-            bends = sorted((s for s in gap if abs(s.from_box.slot_y(s) - s.to_box.slot_y(s)) > 0.5),
-                           key=lambda s: (s.from_box.slot_y(s), s.to_box.slot_y(s)))
-            track0 = x + BOX_W + label_zone
-            for i, seg in enumerate(bends):
-                seg.track_x = track0 + i * TRACK
+            # A track for each line that bends, and for each trunk (all its
+            # segments: the badges sit on it), in the order they leave.
+            units = {}
             for seg in gap:
-                if seg not in bends:
-                    seg.track_x = track0
-            x = track0 + max(len(bends) - 1, 0) * TRACK + 2 * LABEL_PAD
+                units.setdefault(self.trunk_of.get(seg.edge['id'], seg), []).append(seg)
+
+            def bends(seg):
+                return abs(seg.from_box.slot_y(seg) - seg.to_box.slot_y(seg)) > 0.5
+            tracked = sorted(
+                (unit for key, unit in units.items()
+                 if isinstance(key, tuple) or bends(unit[0])),
+                key=lambda unit: (unit[0].from_box.slot_y(unit[0]),
+                                  min(s.to_box.slot_y(s) for s in unit)))
+            if self.trunk_prefix is not None:
+                tracked = self.clear_order(tracked)
+            step = TRACK if self.trunk_prefix is None else TRUNK_TRACK
+            track0 = x + BOX_W + label_zone + (0 if self.trunk_prefix is None else BADGE_R)
+            for seg in gap:
+                seg.track_x = track0
+            for i, unit in enumerate(tracked):
+                for seg in unit:
+                    seg.track_x = track0 + i * step
+            x = track0 + max(len(tracked) - 1, 0) * step + 2 * LABEL_PAD
         for group in self.groups.values():
             group.x = self.column_x[group.column]
+
+    def clear_order(self, units):
+        """``units`` (a gap's tracks, left to right) in the order that runs
+        the fewest lines through another trunk's badge: as given, by where
+        each first lands, or either reversed. A line and a badge only meet
+        when a receiver's slot is level with another trunk's port or tap."""
+        def ends(unit):
+            return (unit[0].from_box.slot_y(unit[0]), [s.to_box.slot_y(s) for s in unit])
+
+        def badges(unit):
+            if unit[0].edge['id'] not in self.trunk_of:
+                return []
+            y0, ys = ends(unit)
+            return ys + ([min([y0] + ys)] if any(abs(y - y0) > 0.5 for y in ys) else [])
+
+        def hits(order):
+            marks = [badges(unit) for unit in order]
+            n = 0
+            for i, unit in enumerate(order):
+                y0, ys = ends(unit)
+                # Its first run crosses the tracks before its own; each
+                # branch, the tracks after.
+                for others, lines in ((marks[:i], [y0]), (marks[i + 1:], ys)):
+                    n += sum(abs(y - mark) < BADGE_R + 2
+                             for other in others for mark in other for y in lines)
+            return n
+        by_landing = sorted(units, key=lambda unit: (min(ends(unit)[1]), ends(unit)[0]))
+        return min((units, units[::-1], by_landing, by_landing[::-1]), key=hits)
 
     # -- routes ----------------------------------------------------------------
 
@@ -750,6 +886,61 @@ class _Builder:
                 lines = [f'[{n}]']
             self.drawn_lines[edge['id']] = lines
 
+    def trunks(self, routes):
+        """The trunks, numbered down the page, with ``routes`` (this
+        builder's) made their branches: each route's label placed in its
+        trunk's stack, each end's port given the trunk's number."""
+        by_id = {r.id: r for r in routes}
+        last = {}           # edge id -> its last segment (into the receiver)
+        for seg in self.segments:
+            if not seg.to_box.dummy:
+                last[seg.edge['id']] = seg
+        out = []
+        for column in self.columns:
+            for box in column:
+                rows = {}
+                for seg in ([] if box.dummy else box.outs):
+                    if seg.edge['id'] in self.trunk_of:
+                        rows.setdefault(box.out_row[seg], []).append(seg)
+                for row, segs in sorted(rows.items()):
+                    n = len(out) + 1
+                    named = {str(s.edge['stream']) for s in segs if s.edge.get('stream')}
+                    label = named.pop() if len(named) == 1 and all(
+                        s.edge.get('stream') for s in segs) else f'{self.trunk_prefix}{n}'
+                    trunk = Trunk(n, label, (n - 1) % len(STREAM_COLOURS), box.id,
+                                  ' '.join(box.out_text[row]), [s.edge['id'] for s in segs])
+                    box.out_stream[row] = n
+                    y0 = box.out_row_y(row)
+                    below = sum(len(by_id[e].lines) for e in trunk.edges)
+                    paths = []
+                    for seg in segs:
+                        route = by_id[seg.edge['id']]
+                        below -= len(route.lines)
+                        route.trunk = n
+                        route.label_y = y0 - 4 - below * LABEL_LH
+                        end = last[route.id]
+                        if end in end.to_box.in_slot:
+                            end.to_box.in_stream[end.to_box.in_slot[end]] = n
+                        paths.append((route.points, 'b' in route.classes))
+                        trunk.badges.append(Badge(end.track_x, route.points[-1][1], label,
+                                                  filled='inferred' not in route.classes,
+                                                  edge=route.id))
+                    trunk.lines = _pieces(paths)
+                    upright = [l for l in trunk.lines if abs(l[0] - l[2]) < 0.01]
+                    if upright:
+                        x, top = min(((l[0], min(l[1], l[3])) for l in upright),
+                                     key=lambda p: (p[1], p[0]))
+                        if not any(abs(b.x - x) < 0.01 and abs(b.y - top) < 0.01
+                                   for b in trunk.badges):
+                            trunk.badges.insert(0, Badge(x, top, label, filled=True))
+                    out.append(trunk)
+        # What is left is a "?" feed: dashed like any other, not a network
+        # line of its own style (every network line here is a trunk).
+        for route in routes:
+            if route.trunk is None:
+                route.classes = tuple(c for c in route.classes if c != 'network')
+        return out
+
     def routes(self):
         out = []
         for edge, src, dst in self.edges:
@@ -793,6 +984,52 @@ def _classes(edge):
     if edge.get('b'):
         out.append('b')         # a B input link: drawn lighter (svg.STYLE)
     return tuple(out)
+
+
+def _union(spans):
+    out = []
+    for a, b in sorted(spans):
+        if out and a <= out[-1][1] + 0.01:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def _minus(spans, cover):
+    """``spans`` without what ``cover`` holds (both as ``_union`` gives them)."""
+    out = []
+    for a, b in spans:
+        for c, d in cover:
+            if d <= a or c >= b:
+                continue
+            if c - a > 0.01:
+                out.append((a, c))
+            a = max(a, d)
+        if b - a > 0.01:
+            out.append((a, b))
+    return out
+
+
+def _pieces(paths):
+    """[(x0, y0, x1, y1, faded)]: every stretch of ``paths`` ([(points,
+    faded)], orthogonal) once, however many of them run along it. A stretch
+    only faded paths (B input links) run along is faded."""
+    spans = {}
+    for points, faded in paths:
+        for (x0, y0), (x1, y1) in zip(points, points[1:]):
+            if abs(y0 - y1) < 0.01:
+                key, span = ('h', round(y0, 2)), tuple(sorted((x0, x1)))
+            else:
+                key, span = ('v', round(x0, 2)), tuple(sorted((y0, y1)))
+            spans.setdefault(key, ([], []))[bool(faded)].append(span)
+    out = []
+    for (way, at), (solid, faded) in sorted(spans.items()):
+        solid = _union(solid)
+        for is_faded, group in ((False, solid), (True, _minus(_union(faded), solid))):
+            for a, b in group:
+                out.append((a, at, b, at, is_faded) if way == 'h' else (at, a, at, b, is_faded))
+    return out
 
 
 def _simplify(points):
@@ -848,12 +1085,14 @@ class _CommsBuilder(_Builder):
 BUILDERS = {DEFAULT_SCHEME: _Builder, COMMS_SCHEME: _CommsBuilder}
 
 
-def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFAULT_SCHEME):
+def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFAULT_SCHEME,
+           trunks=None):
     """``hide_empty``: the columns left out when no box is in them (a tab
     passes ``ALL_COLUMNS``). ``label_max``: the widest a label line may be;
     a wider one makes the label a key. ``scheme``: which columns (the
-    seven, or the Comms tab's three)."""
-    b = BUILDERS[scheme](graph, hide_empty, label_max)
+    seven, or the Comms tab's three). ``trunks``: a prefix ("T") to draw the
+    lines leaving one port as one trunk, named with it and a number."""
+    b = BUILDERS[scheme](graph, hide_empty, label_max, trunks)
     b.build()
     b.fit_labels()
     b.order()
@@ -861,6 +1100,7 @@ def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFA
     b.place_y()
     b.place_x()
     routes = b.routes()
+    trunks = b.trunks(routes) if trunks is not None else []
     boxes = [box for column in b.columns for box in column if not box.dummy]
     shown = [b.column_x[c] for c in range(len(b.titles)) if c not in b.hidden]
     width = (max(shown) if shown else MARGIN) + BOX_W + MARGIN
@@ -871,4 +1111,4 @@ def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFA
                      if any(box.group == g.key for box in b.columns[g.column])),
                     key=lambda g: (g.column, g.rank))
     return Layout(width, height, columns, boxes, groups, routes,
-                  [e['id'] for e in b.not_drawn])
+                  [e['id'] for e in b.not_drawn], trunks)

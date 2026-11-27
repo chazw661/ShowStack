@@ -18,6 +18,12 @@ draw each as its own section.
              ``views_wiring.avb_devices`` read, never from the project graph.
              No headers per network (AVB has no network name; amps keep their
              rack headers) and no banner (there is no setting to make).
+
+The Dante and AVB tabs are drawn as trunks (``TRUNK_TABS``;
+``layout(trunks=)``): one line leaves each source port and branches to its
+receivers, in a colour and with a name of its own. An AVB edge carries the
+real output number as ``stream`` (added here, never in the project graph), so
+its trunk is named with it; a Dante trunk is "T1"… down the tab.
   analog     analog and AES feeds (I/O or console -> processor -> amp, I/O
              -> amp, their unlinked feeds and "?" matches) and every console
              link that is not Dante. A console link whose device has no
@@ -55,6 +61,8 @@ box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
 plugs in where.
 """
 
+import re
+
 OVERVIEW, DANTE, AVB, ANALOG, SPEAKERS, COMMS = (
     'overview', 'dante', 'avb', 'analog', 'speakers', 'comms')
 TABS = (
@@ -71,6 +79,9 @@ TAB_KEYS = tuple(key for key, _ in TABS)
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceInput.console_input_b',
                        'DeviceOutput.console_output')
 CABLE_FEEDS = ('analog', 'aes')
+TRUNK_TABS = (DANTE, AVB)      # one trunk per source port, a branch per receiver
+TRUNK_PREFIX = 'T'              # a trunk with no stream number of its own: "T1"
+AVB_PORT = re.compile(r'AVB (\d+)$')
 SPEAKER_LABEL_MAX = 560     # two or three columns: room for the whole cable label
 
 
@@ -88,6 +99,8 @@ def layout_options(tab):
     if tab == COMMS:
         return {'scheme': COMMS_SCHEME, 'hide_empty': ()}
     options = {'hide_empty': ALL_COLUMNS}
+    if tab in TRUNK_TABS:
+        options['trunks'] = TRUNK_PREFIX
     if tab == SPEAKERS:
         options['label_max'] = SPEAKER_LABEL_MAX
     return options
@@ -134,6 +147,13 @@ def _keep_dante(edge, nodes):
 
 def _keep_avb(edge, nodes):
     return 'avb' in edge.get('transports', ()) and not edge.get('comm')
+
+
+def _avb_stream(edge):
+    """The AVB output number an edge's links all leave from ("3"), or ''."""
+    numbers = {m.group(1) if m else '' for l in edge.get('links', ())
+               for m in [AVB_PORT.match(l.get('from_port') or '')]}
+    return numbers.pop() if len(numbers) == 1 else ''
 
 
 def _keep_analog(edge, nodes):
@@ -290,6 +310,8 @@ def graph_view(graph, tab):
         if tab == ANALOG and is_console_link(edge) and not _device_end(edge, nodes).get(
                 'console_connection'):
             edge = {**edge, 'connection_unset': True}
+        if tab == AVB and _avb_stream(edge):
+            edge = {**edge, 'stream': _avb_stream(edge)}    # its trunk's name
         edges.append(edge)
 
     drawn = [e for e in edges if not e.get('comm')]

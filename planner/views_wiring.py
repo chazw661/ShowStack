@@ -47,7 +47,7 @@ from django.views.decorators.http import require_GET
 from planner.connections import svg
 from planner.connections import tabs as T
 from planner.connections.graph import digest, project_graph
-from planner.connections.layout import layout
+from planner.connections.layout import STREAM_COLOURS, layout
 from planner.tenancy import current_project_or_none as _scoped_project
 from planner.views import _shared_header_context
 
@@ -205,6 +205,14 @@ def avb_devices(project):
     return {'processors': processors, 'ips': ips}
 
 
+def stream_legend(lay):
+    """What the page's legend shows of a tab drawn as trunks: the first
+    trunk's name and colour; None on any other tab."""
+    if not lay.trunks:
+        return None
+    return {'label': lay.trunks[0].label, 'colour': STREAM_COLOURS[lay.trunks[0].colour]}
+
+
 def tab_layout(full, tab, network=True, avb=None):
     """(graph, layout, network feeds hidden) of one tab: no queries.
     ``avb``: ``avb_devices(project)``, for the AVB tab."""
@@ -283,6 +291,7 @@ def wiring_diagram(request):
         'tab_empty_text': view['tab_empty_text'],
         'show_unset_legend': view['show_unset_legend'],
         'show_b_legend': view['show_b_legend'],
+        'stream_legend': stream_legend(view['layout']),
         'network_toggle': tab == T.OVERVIEW,
         'network': network,
         'hidden_network': view['hidden_network'],
