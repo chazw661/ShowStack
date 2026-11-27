@@ -135,7 +135,10 @@ def connection_rows(graph, lay, full=None):
     for key, edge_id in lay.keys:
         edge = edges[edge_id]
         to = nodes.get(edge['to'], {})
-        slot = next((s['label'] for s in to.get('slots', ()) if s['id'] == edge.get('to_slot')), '')
+        slot = ''
+        if to.get('kind') in ('amp', 'processor'):      # elsewhere the slot is the ports again
+            slot = next((s['label'] for s in to.get('slots', ())
+                         if s['id'] == edge.get('to_slot')), '')
         transports = edge.get('transports', ())
         if 'speaker' in transports:
             cable = '; '.join(edge.get('label_lines') or [edge.get('label', '')])

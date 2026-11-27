@@ -199,6 +199,7 @@ class _Drawing:
     def __init__(self, ezdxf, arrows, prefix=DEFAULT_PREFIX, mode=SPLIT):
         from ezdxf.enums import TextEntityAlignment
         self.left = TextEntityAlignment.LEFT
+        self.right = TextEntityAlignment.RIGHT
         self.arrows = arrows
         self.doc = ezdxf.new(DXF_VERSION, setup=False)
         self.doc.units = 1          # $INSUNITS: inches
@@ -240,10 +241,12 @@ class _Drawing:
             attribs['true_color'] = colour
         return attribs
 
-    def text(self, x, y, text, size, layer=TEXT, bold=False, fit=None, colour=None):
+    def text(self, x, y, text, size, layer=TEXT, bold=False, fit=None, colour=None,
+             anchor='start'):
         """One line at baseline ``y``; ``size`` is the screen's font size.
         ``fit``: the widest it may be, in layout units; a longer line is
-        squeezed (TEXT width factor), never under MIN_WIDTH."""
+        squeezed (TEXT width factor), never under MIN_WIDTH. ``anchor``
+        'end': the line ends at ``x`` (right-aligned)."""
         value = clean(text, self.arrows)
         if not value:
             return None
@@ -254,7 +257,11 @@ class _Drawing:
             attribs['width'] = round(max(MIN_WIDTH, fit / width), 3)
             width *= attribs['width']
         entity = self.msp.add_text(value, height=round(size * CAP * UNIT, 5), dxfattribs=attribs)
-        entity.set_placement(self.pt(x, y), align=self.left)
+        if anchor == 'end':
+            entity.set_placement(self.pt(x, y), align=self.right)
+            x -= width
+        else:
+            entity.set_placement(self.pt(x, y), align=self.left)
         self._seen(x, y - size)
         self._seen(x + width, y + size * 0.3)
         return entity
@@ -342,12 +349,9 @@ def _box(d, box):
            DASHED if box.style == 'unlinked' else CONTINUOUS)
     for cls, line, dy in box.text_rows:
         d.text(box.x + 8, box.y + dy, line, 12 if cls == 't' else 11, bold=cls == 't', fit=L.TEXT_W)
-    for i, (label, lines) in enumerate(zip(box.slots, box.slot_lines)):
-        if not label:
-            continue
-        y = box.row_y(i) + 3.5
+    for anchor, x, y, lines, _ in box.port_texts():
         for j, line in enumerate(lines):
-            d.text(box.x + 8, y + j * L.SLOT_LH, line, 10, fit=L.TEXT_W)
+            d.text(x, y + j * L.SLOT_LH, line, 10, fit=L.TEXT_W, anchor=anchor)
 
 
 def _route(d, tab, route, edge):

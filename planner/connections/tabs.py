@@ -157,13 +157,16 @@ def _ports(edges, device_id):
             'outputs': sum(r.startswith('deviceoutput:') for r in refs)}
 
 
+KEPT_SLOTS = ('amp', 'processor')   # a console's or an I/O device's slot goes with its line
+
+
 def without_network(graph):
     nodes = {n['id']: n for n in graph['nodes']}
     edges, sources = [], {}         # (node, slot id) -> the hidden feeds' sources
     for edge in graph['edges']:
         if not edge.get('network'):
             edges.append(edge)
-        elif edge.get('to_slot'):
+        elif edge.get('to_slot') and nodes.get(edge['to'], {}).get('kind') in KEPT_SLOTS:
             frm = nodes.get(edge['from'], {}).get('label', '')
             text = ' '.join(x for x in (frm, edge.get('label', '')) if x)
             sources.setdefault((edge['to'], edge['to_slot']), []).append(text)

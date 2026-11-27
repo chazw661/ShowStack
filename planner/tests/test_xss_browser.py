@@ -463,8 +463,9 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
                                     Device, DeviceOutput, Location, P1Output, P1Processor,
                                     SystemProcessor)
         long_name = f'{QUOTED} {NAME} {QUOTED}'
-        desk = Console.objects.create(project=self.project, name=long_name)
-        box = Device.objects.create(project=self.project, name=NAME)
+        # The line's label names its far end, so the long name is the box's.
+        desk = Console.objects.create(project=self.project, name=NAME)
+        box = Device.objects.create(project=self.project, name=long_name)
         for n in range(1, 50, 2):
             bus = ConsoleAuxOutput.objects.create(console=desk, aux_number=str(n), name=f'Mix {n}')
             DeviceOutput.objects.create(device=box, output_number=n, signal_name=f'Mix {n}',
@@ -488,8 +489,10 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
             "[...document.querySelectorAll('svg.wd-svg .wd-box')].map(g => g.querySelectorAll("
             "'text.t').length).reduce((a, b) => Math.max(a, b), 0)"), 1)
         self.assert_text(page, 'svg.wd-svg .wd-key text', '[1]', 'key badge on the line')
-        self.assert_text(page, '#wd-connections td', long_name, 'connections table, from')
-        self.assert_text(page, '#wd-connections td', NAME, 'connections table, to')
+        self.assert_text(page, '#wd-connections td', NAME, 'connections table, from')
+        self.assert_text(page, '#wd-connections td', long_name, 'connections table, to')
+        # the console's buses, named inside its box where the line leaves
+        self.assert_text(page, 'svg.wd-svg text.p[data-side="out"]', 'Aux 1, 3, 5', 'source ports')
 
         page = self.open(url + '?view=overview&network=0')
         page.wait_for_selector('svg.wd-svg')
@@ -537,13 +540,15 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
             self.assert_text(page, '#wd-connections td', QUOTED, f'{view}: B row console')
             self.assertGreater(page.evaluate(
                 "document.querySelectorAll('svg.wd-svg path.wd-edge.b').length"), 0)
-        # A short Source (B) is drawn on the line itself.
-        short = '"><b>B</b>'
+        # A short far end and Source (B) are drawn on the line itself.
+        short, short_desk = '"><b>B</b>', '"><i>D</i>'
         ConsoleInput.objects.filter(pk=kick.pk).update(source_b=short)
+        Console.objects.filter(pk=desk.pk).update(name=short_desk)
         page = self.open(url)
         page.wait_for_selector('svg.wd-svg')
-        self.assert_text(page, 'svg.wd-svg .wd-label.b', f'In 2 → Ch 1 (B) · {short}', 'B label')
-        self.assertEqual(page.evaluate("document.querySelectorAll('svg.wd-svg b').length"), 0)
+        self.assert_text(page, 'svg.wd-svg .wd-label.b', f'{short_desk} Ch 1 (B) · {short}', 'B label')
+        self.assertEqual(page.evaluate("document.querySelectorAll('svg.wd-svg b, svg.wd-svg i').length"), 0)
+        self.assert_text(page, 'svg.wd-svg text.p', f'Ch 1 (B) ← {NAME} In 2', 'B input slot')
 
     def test_the_download_panel_with_hostile_names(self):
         # PR: wiring PDF, then DXF. The panel sends the ticked tabs, the

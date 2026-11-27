@@ -200,7 +200,7 @@ class AnalogTabTests(TabShow, TestCase):
         [route] = [r for r in self.lay.routes if r.from_node == self.id['plain']
                    and r.to_node == self.id['desk']]
         self.assertIn('unset', route.classes)
-        self.assertEqual(route.label, 'In 1 → Ch 3 · connection not set')
+        self.assertEqual(route.label, 'FOH Desk Ch 3 · connection not set')
         [madi] = [r for r in self.lay.routes if r.from_node == self.id['madi']]
         self.assertNotIn('unset', madi.classes)
         self.assertNotIn('not set', madi.label)
@@ -209,12 +209,12 @@ class AnalogTabTests(TabShow, TestCase):
         froms = {(e['from'], e['to']) for e in self.graph['edges']}
         self.assertIn((self.id['plain'], self.id['sl']), froms)
         self.assertIn((self.id['sl'], self.id['amp']), froms)
-        self.assertEqual(self.boxes[self.id['amp']].slots, ['AES 1 ← SL P1 AES 1 (Main L)'])
+        self.assertEqual(self.boxes[self.id['amp']].slots, ['AES 1 ← SL P1 AES Out 1 (Main L)'])
 
     def test_the_overview_still_has_the_avb_slot(self):
         self.tab(T.OVERVIEW)
         self.assertEqual(self.boxes[self.id['amp']].slots,
-                         ['AVB ← SL P1 stream 1 (Main L) · Ch 1', 'AES 1 ← SL P1 AES 1 (Main L)'])
+                         ['AVB ← SL P1 stream 1 (Main L) · Ch 1', 'AES 1 ← SL P1 AES Out 1 (Main L)'])
 
     def test_only_used_columns_and_nothing_left_undrawn(self):
         self.assertNotIn('Speakers', self.titles())
