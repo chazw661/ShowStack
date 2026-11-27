@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, TestCase
 from planner.connections import layout as L
 from planner.connections import svg
 from planner.connections.graph import project_graph
-from planner.models import AmpLocation, Console, ConsoleAuxOutput
+from planner.models import Amp, AmpLocation, Console, ConsoleAuxOutput, Device
 from planner.tests.connection_fixtures import ConnectionFixtures
 
 SVG_NS = '{http://www.w3.org/2000/svg}'
@@ -391,11 +391,74 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.assertEqual(len(labels), 3)
         for label in labels:
             self.assertNotIn('→ Ch', label)
-        # An XLR / AES input is named by its number; an AVB feed has none.
+            # An XLR / AES input is named by its number, never by channel;
+            # only an AVB feed, with no input number, lists its channels.
+            if 'AVB' not in label:
+                self.assertNotIn('Ch ', label)
         self.assertEqual(sorted(labels), ['? AVB Nope · SL Amp AVB Ch 1–2', 'SL Amp AES 2', 'SL Amp XLR 1'])
         for edge in self.graph['edges']:
             if edge['to'] == self.amp_id:
                 self.assertNotIn('→', edge['label'])
+
+    def far_labels(self):
+        return sorted(e['label'] for e in self.graph['edges'] if e['to'].startswith('amp:'))
+
+    def test_two_amps_of_one_name_are_told_apart_by_location(self):
+        """The pickers' rule (sources.disambiguate) on the names a label on
+        another box uses: location, then IP, then "(duplicate device)"."""
+        left = self.amp('Rack 1 - Amp 1', rack='PA Left')
+        right = self.amp('Rack 1 - Amp 1', rack='PA Right')
+        self.device_output(self.box, 1, 'Fill')
+        self.p1_out(self.sl, 'AVB', 3, 'Delay')
+        for amp in (left, right):
+            self.amp_channel(amp, 1, analog_input='Fill', avb_stream='AVB 3 - Delay')
+        self.draw()
+        self.assertEqual(self.far_labels(), [
+            'Rack 1 - Amp 1 (PA Left) AVB Ch 1', 'Rack 1 - Amp 1 (PA Left) XLR 1',
+            'Rack 1 - Amp 1 (PA Right) AVB Ch 1', 'Rack 1 - Amp 1 (PA Right) XLR 1'])
+        # the route labels the diagram draws are the same, each once
+        drawn = sorted(r.label for r in self.lay.routes if r.to_node.startswith('amp:'))
+        self.assertEqual(drawn, self.far_labels())
+        # the box titles are untouched: a box already sits under its rack
+        nodes = {n['id']: n for n in self.graph['nodes']}
+        self.assertEqual(nodes[f'amp:{left.pk}']['label'], 'Rack 1 - Amp 1')
+        self.assertEqual(nodes[f'amp:{left.pk}']['name'], 'Rack 1 - Amp 1 (PA Left)')
+        self.assertNotIn('name', nodes[self.amp_id])        # a name of its own: nothing added
+
+    def test_a_console_and_a_device_of_one_name_keep_their_names(self):
+        # Their ports tell them apart ("Ch 1", "In 1"): only two of a kind collide.
+        desk = self.console('Stage Box')
+        self.device_input(self.box, 1, channel=self.channel(desk, 1, 'Kick'))
+        self.draw()
+        self.assertFalse([n for n in self.graph['nodes'] if 'name' in n])
+        self.assertEqual([e['label'] for e in self.graph['edges']], ['Stage Box Ch 1'])
+
+    def test_same_named_amps_in_one_rack_use_ip_then_say_duplicate(self):
+        one = self.amp('Rack 1 - Amp 1')
+        two = self.amp('Rack 1 - Amp 1')
+        self.device_output(self.box, 1, 'Fill')
+        for amp in (one, two):
+            self.amp_channel(amp, 1, analog_input='Fill')
+        self.draw()
+        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (duplicate device) XLR 1'] * 2)
+        Amp.objects.filter(pk=one.pk).update(ip_address='10.0.0.1')
+        Amp.objects.filter(pk=two.pk).update(ip_address='10.0.0.2')
+        self.draw()
+        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (SL Racks, 10.0.0.1) XLR 1',
+                                             'Rack 1 - Amp 1 (SL Racks, 10.0.0.2) XLR 1'])
+
+    def test_a_slot_names_which_of_two_same_named_sources_feeds_it(self):
+        other = self.device('Stage Box')
+        Device.objects.filter(pk=self.box.pk).update(location=self.location(self.project, 'Stage Left'))
+        Device.objects.filter(pk=other.pk).update(location=self.location(self.project, 'Stage Right'))
+        self.device_output(self.box, 1, 'Fill L')
+        self.device_output(other, 1, 'Fill R')
+        self.amp_channel(self.amp_, 1, analog_input='Fill L')
+        self.amp_channel(self.amp_, 2, analog_input='Fill R')
+        self.draw()
+        self.assertEqual(self.boxes[self.amp_id].slots, [
+            'XLR 1 ← Stage Box (Stage Left) Analog Out 1 (Fill L)',
+            'XLR 2 ← Stage Box (Stage Right) Analog Out 1 (Fill R)'])
 
     def test_one_source_into_several_channels_is_one_slot(self):
         self.device_output(self.box, 1, 'Fill')

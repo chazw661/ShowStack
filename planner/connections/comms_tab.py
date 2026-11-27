@@ -38,7 +38,7 @@ def _row_key(port):
 def _own_links(graph):
     """{I/O port ref: "← FOH Aux 12" / "→ FOH Ch 5"}: the console link each
     I/O port has of its own (A links only)."""
-    labels = {n['id']: n['label'] for n in graph['nodes']}
+    labels = {n['id']: n.get('name') or n['label'] for n in graph['nodes']}
     out = {}
     for edge in graph['edges']:
         if edge.get('comm') or edge.get('b') or not any(
@@ -84,7 +84,7 @@ def comms_view(graph):
             row(frm, from_box, link['from_ref'], link['from_port'], link.get('from_name', ''))
             row(to, to_box, link['to_ref'], link['to_port'], link.get('to_name', ''))
             label = ' · '.join(x for x in (
-                ' '.join(y for y in (nodes[to].get('label', ''), link['to_port']) if y),
+                ' '.join(y for y in (nodes[to].get('name') or nodes[to].get('label', ''), link['to_port']) if y),
                 link.get('cable_type', '')) if x)
             new_id = f"{edge['id']}.{i}"
             first.setdefault(edge['id'], new_id)
