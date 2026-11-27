@@ -101,6 +101,7 @@ def layout_options(tab):
     options = {'hide_empty': ALL_COLUMNS}
     if tab in TRUNK_TABS:
         options['trunks'] = TRUNK_PREFIX
+        options['wrap'] = True      # a tall column wraps into sub-columns
     if tab == SPEAKERS:
         options['label_max'] = SPEAKER_LABEL_MAX
     return options

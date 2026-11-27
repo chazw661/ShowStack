@@ -12,10 +12,12 @@ its label at 80%, labelled "(B)", with its own legend entry.
 Each tab starts a page: a title block (project, tab, when it was printed,
 the graph's digest), the legend, then the diagram at one scale
 (``connections.tiling``: fitted to the page, at most 1.5x, never under 6pt
-text; tiled when it would be). A tiled page shows where it sits in its
-tab's tiles, and every line running on to another page says "→ p.N" where
-it leaves and "from p.N" where it comes back. The Connections table follows
-(header row repeated on each page, no row split), then Warnings.
+text; tiled when it would be, at the largest scale that needs no more
+pages). A tiled page shows where it sits in its tab's tiles, and every line
+running on to another page says "→ p.N" where it leaves and "from p.N" where
+it comes back. The Connections table follows (header row repeated on each
+page, no row split), then Warnings. A tab with no warnings says "Warnings:
+none" in its title block instead, so it has no page for them.
 
 The document is built twice: the first pass finds the page each tile lands
 on and the page count, the second draws the page numbers in.
@@ -82,6 +84,7 @@ TAP_LEGEND = ('Confirmed', 'Inferred from labels')     # a filled badge, a hollo
 NOT_LINKED_LEGEND = LEGEND[2]
 UNSET_LEGEND = ('Console connection not set', ('unset',))
 B_LEGEND = ('B input (lighter; labelled “(B)”)', ('b',))
+NO_WARNINGS = 'Warnings: none'      # in the title block, instead of a Warnings section
 
 
 def _cascade(styles, classes):
@@ -199,7 +202,7 @@ def _draw_badges(c, w, tile, trunk):
         if tile.holds(badge.x, badge.y):
             x0, y0, x1, y1 = badge.box
             _draw_badge(c, w.x(badge.x), w.y(badge.y), w.pt(x1 - x0) / 2, w.pt(y1 - y0) / 2,
-                        badge.text, stream_colour(trunk), badge.filled, w.pt(9))
+                        badge.text, stream_colour(trunk), badge.filled, w.pt(L.BADGE_PX))
 
 
 def _draw_route(c, w, route, trunk=None):
@@ -399,6 +402,8 @@ class DiagramPage(Flowable):
         top = self.height
         draw_text(c, 0, top - 14, self.info['project'], BOLD, 14, INK)
         parts = [f"Printed {self.info['printed']}", f"Graph {self.info['digest']}"]
+        if not self.view['warnings']:
+            parts.append(NO_WARNINGS)
         if self.plan.tiled:
             parts.insert(0, f'Part {self.tile.index + 1} of {len(self.plan.tiles)}')
         draw_text(c, 0, top - 31, self.view['tab_label'], SEMIBOLD, 11.5, NAVY)
@@ -505,10 +510,12 @@ def _connections(view, width, S):
 
 
 def _warnings(view, S):
-    out = [Paragraph(_para_text(f"Warnings ({len(view['warnings'])}) — {view['tab_label']}"
-                                if view['warnings'] else f"Warnings — {view['tab_label']}"), S['h2'])]
+    """The tab's warnings; nothing when there are none (its title block
+    says so)."""
     if not view['warnings']:
-        return out + [Paragraph('None.', S['body'])]
+        return []
+    out = [Paragraph(_para_text(f"Warnings ({len(view['warnings'])}) — {view['tab_label']}"),
+                     S['h2'])]
     for w in view['warnings']:
         text = f"<b>{_para_text(w['title'])}</b>: {_para_text(w['edge'])}"
         if w.get('text'):
@@ -535,7 +542,9 @@ class _Empty(Flowable):
         draw_text(c, 0, self.height - 14, self.info['project'], BOLD, 14, INK)
         draw_text(c, 0, self.height - 31, self.view['tab_label'], SEMIBOLD, 11.5, NAVY)
         draw_text(c, text_width(self.view['tab_label'], SEMIBOLD, 11.5) + 12, self.height - 31,
-                  f"Printed {self.info['printed']}  ·  Graph {self.info['digest']}", REGULAR, 9, MUTED)
+                  '  ·  '.join([f"Printed {self.info['printed']}", f"Graph {self.info['digest']}"]
+                               + ([] if self.view['warnings'] else [NO_WARNINGS])),
+                  REGULAR, 9, MUTED)
         draw_text(c, 0, self.height - 52, self.text, REGULAR, 10, MUTED)
 
 

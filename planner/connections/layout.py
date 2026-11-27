@@ -103,6 +103,18 @@ A gap's tracks are put in the order that runs no line through another
 trunk's badge when there is one (``clear_order``).
 ``Box.port_streams()`` is, for each of ``port_texts()``, the trunk it belongs
 to (its ``n``) or None.
+
+``layout(graph, wrap=True)`` (the Dante and AVB tabs too): a tab that would
+not fit an 11x17 page at 100% (WRAP_PAGE) has its tallest column wrapped
+into sub-columns, side by side, one more at a time for as long as the tab
+then fits the page at a scale WRAP_GAIN larger. A sub-column is a column in every way
+(``Layout.columns`` lists it, titled "Amps (cont.)"; the page cuts fall
+between them), but no line runs between two sub-columns of one column. The
+boxes keep their order, top to bottom then left to right, cut where the
+sub-columns come out most even: between two groups when that is nearly as
+even (within WRAP_GROUP_SLACK), else inside one, whose later part is headed
+"PA LEFT (continued)". A line that passes a sub-column runs in a lane at its
+top, above the first header, LANE_GAP from the next lane.
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -123,14 +135,15 @@ COMMS_TITLES = ('To comms', 'Comm devices', 'From comms')
 COMMS_COLUMN = {'to': TO_COMMS, 'main': COMM_DEVICES, 'from': FROM_COMMS}
 
 BOX_W = 200
-HEAD = 34           # title + subtitle above the first port slot
+HEAD = 28           # title + subtitle above the first port slot
 TITLE_LH = 14       # each further line of a wrapped title
 LINE_H = 13         # each further subtitle line, and each extra line (an IP line)
 SLOT = 18           # port slots, and the lines on them, are this far apart
 SLOT_LH = 12        # each further line of a wrapped slot name
 LABEL_LH = 13       # between the lines of a label
-PAD = 8             # below the last slot
-GAP_Y = 18          # between boxes in a column
+PAD = 5             # below the last slot
+GAP_Y = 10          # between boxes in a column
+LANE_GAP = 0        # between two lanes at the top of a wrapped column: lines SLOT apart
 GROUP_HEAD = 24     # an amp location's header
 MARGIN = 24
 TITLE_H = 42        # column titles, and the hint line under two of them
@@ -139,7 +152,8 @@ HINT_Y = 26         # its hint's baseline
 TRACK = 8           # between vertical tracks in a gap
 TRUNK_TRACK = 20    # ... on a tab drawn as trunks: room for the badges on them
 BADGE_R = 7         # a stream badge's half height
-BADGE_CHAR_W = 5.6  # bold 9px badge text
+BADGE_PX = 10       # a badge's text: never under the PDF's 6pt at its smallest scale
+BADGE_CHAR_W = 6.2  # bold 10px badge text
 # A trunk's colour: dark enough to read as 10px text on a box (4.5:1 or
 # better), apart from each other for protan, deutan and tritan eyes, and none
 # close to the diagram's own text or borders. ``test_wiring_trunks`` pins it.
@@ -159,6 +173,12 @@ KEY_H = 14          # the badge's height, centred on the line
 KEY_LINE = 11       # an out-row holding a badge: its line this far below the row's top
 KEY_ROW = 26        # ... and the row this tall, so 4px clear the next row's label
 SWEEPS = 4
+WRAP_PAGE = (1166, 659)     # an 11x17 page's room for the diagram at 100%, in units
+WRAP_GROUP_SLACK = 1.2      # whole groups, unless cutting inside one is this much more even
+WRAP_GAIN = 1.05            # a further sub-column must let the tab print this much larger
+WRAP_MAX = 8                # sub-columns added to one tab, at most
+CONTINUED = '(continued)'   # after a group's label, on its later parts
+CONT = '(cont.)'            # after a column's title, on its later sub-columns
 
 NO_LOCATION = 'No location'
 UNSET_NOTE = 'connection not set'       # a console link whose device has none (Analog tab)
@@ -173,6 +193,7 @@ class Box:
     column: int
     kind: str
     sub: str = ''
+    logical: int = -1           # which of the scheme's columns ``column`` is (a sub-column of)
     lines: list = field(default_factory=list)   # extra text lines (the graph node's ``lines``)
     note: str = ''              # a last text line that links to the Comms tab (``comms_note``)
     style: str = 'device'       # 'device' / 'unlinked' / 'location' / 'dummy'
@@ -241,7 +262,7 @@ class Box:
 
     @cached_property
     def head(self):
-        return self.text_rows[-1][2] + HEAD - 28     # 6 under the last baseline
+        return self.text_rows[-1][2] + HEAD - 28     # the rows start at the last baseline
 
     def row_y(self, i):
         """Input row ``i``'s line (a wrapped slot's first line)."""
@@ -471,7 +492,9 @@ def _location_group(node):
 class _Builder:
     titles = COLUMN_TITLES
 
-    def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, trunks=None):
+    def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, trunks=None,
+                 split=None):
+        self.split = split or {}        # column -> {box id: its sub-column, 0..}
         self.trunk_prefix = trunks      # None: a line per edge
         self.trunk_of = {}              # edge id -> (source box id, from_slot), its trunk
         self.hide_empty = hide_empty
@@ -479,7 +502,14 @@ class _Builder:
         self.graph = graph
         self.nodes = {n['id']: n for n in graph['nodes']}
         self.boxes = {}                 # box id -> Box
-        self.columns = [[] for _ in self.titles]
+        # ``Box.column`` and ``self.columns`` are the columns as drawn: a
+        # wrapped column is several. ``Box.logical`` is the scheme's column.
+        self.first, self.logical_of = [], []
+        for c in range(len(self.titles)):
+            self.first.append(len(self.logical_of))
+            self.logical_of += [c] * (max(self.split.get(c, {}).values(), default=0) + 1)
+        self.columns = [[] for _ in self.logical_of]
+        self.wrapped = {p for p, c in enumerate(self.logical_of) if c in self.split}
         self.groups = {}                # key -> Group
         self.segments = []
         self.edges = []                 # (edge, from box, to box)
@@ -490,10 +520,30 @@ class _Builder:
     def box(self, box_id, **kw):
         if box_id not in self.boxes:
             box = Box(box_id, **kw)
+            box.logical = box.column
+            box.column = self.first[box.logical] + self.split.get(box.logical, {}).get(box_id, 0)
             box.lines = list(self.nodes.get(box.node, {}).get('lines', ()))
             box.note = self.nodes.get(box.node, {}).get('comms_note', '')
             self.boxes[box_id] = box
             self.columns[box.column].append(box)
+        return self.boxes[box_id]
+
+    def subs(self, c):
+        """The columns, as drawn, of the scheme's column ``c``."""
+        return [p for p, logical in enumerate(self.logical_of) if logical == c]
+
+    def title(self, p):
+        title = self.titles[self.logical_of[p]]
+        return title if p == self.first[self.logical_of[p]] else f'{title} {CONT}'
+
+    def lane(self, lane, p):
+        """The one-slot dummy a line passes column ``p`` (as drawn) through."""
+        box_id = f'{lane}~{p}'
+        if box_id not in self.boxes:
+            box = Box(box_id, label='', column=p, kind='dummy', style='dummy', h=SLOT,
+                      logical=self.logical_of[p])
+            self.boxes[box_id] = box
+            self.columns[p].append(box)
         return self.boxes[box_id]
 
     def device_box(self, node, side):
@@ -577,14 +627,14 @@ class _Builder:
                 continue
             src = self.node_box(edge['from'], edge, 'from')
             dst = self.node_box(edge['to'], edge, 'to')
-            if src.column >= dst.column:
+            if src.logical >= dst.logical:
                 self.not_drawn.append(edge)
                 continue
             self.edges.append((edge, src, dst))
         # A column with no box of its own is left out: no title, no width, and
         # no dummies, so lines cross the gap where it would be.
-        self.hidden = {c for c in self.hide_empty
-                       if c < len(self.columns) and not self.columns[c]}
+        self.hidden = {self.first[c] for c in self.hide_empty
+                       if c < len(self.titles) and not any(self.columns[p] for p in self.subs(c))}
         for edge, src, dst in self.edges:
             lane = edge['id']
             if (self.trunk_prefix is not None and edge.get('from_slot')
@@ -592,10 +642,8 @@ class _Builder:
                 # One trunk for all that leaves this port: one lane too.
                 self.trunk_of[edge['id']] = (src.id, edge['from_slot'])
                 lane = f"trunk:{src.id}:{edge['from_slot']}"
-            chain = [src] + [self.box(f"{lane}~{c}", label='', column=c, kind='dummy',
-                                      style='dummy', h=SLOT)
-                             for c in range(src.column + 1, dst.column)
-                             if c not in self.hidden] + [dst]
+            chain = [src] + [self.lane(lane, p) for p in range(src.column + 1, dst.column)
+                             if p not in self.hidden] + [dst]
             for i, (a, b) in enumerate(zip(chain, chain[1:])):
                 seg = Segment(edge, a, b, first=i == 0)
                 a.outs.append(seg)
@@ -607,16 +655,35 @@ class _Builder:
         self.groups = {key: Group(key, label, rank, column)
                        for rank, (key, (label, _, column)) in enumerate(ranked)}
         # Speaker arrays no cable reaches go last, under their own header.
-        for box in (self.columns[SPEAKER] if self.titles is COLUMN_TITLES else ()):
-            if box.kind == 'speaker_array' and not box.ins and not box.outs:
+        for box in (self.boxes.values() if self.titles is COLUMN_TITLES else ()):
+            if (box.logical == SPEAKER and box.kind == 'speaker_array'
+                    and not box.ins and not box.outs):
                 box.group = NOT_CABLED
                 self.groups.setdefault(NOT_CABLED, Group(NOT_CABLED, NOT_CABLED_LABEL, 1, SPEAKER))
+        # A header per column as drawn: a group cut by the wrap is headed
+        # again, "(continued)", in each later sub-column.
+        for key, group in list(self.groups.items()):
+            mine = [box for box in self.boxes.values() if not box.dummy and box.group == key]
+            at = sorted({box.column for box in mine})
+            group.column = at[0] if at else self.first[group.column]
+            for p in at[1:]:
+                part = f'{key}~{p}'
+                self.groups[part] = Group(part, f'{group.label} {CONTINUED}', group.rank, p)
+                for box in mine:
+                    if box.column == p:
+                        box.group = part
 
     # -- order ---------------------------------------------------------------
 
+    def top_lane(self, box):
+        """A line passing a wrapped column: in a lane at its top."""
+        return box.dummy and box.column in self.wrapped
+
     def group_rank(self, box):
+        if self.top_lane(box):
+            return -1
         if box.group is None:
-            return len(self.groups) if box.column == AMP else 0
+            return len(self.groups) if box.logical == AMP else 0
         return self.groups[box.group].rank
 
     def order(self):
@@ -753,15 +820,20 @@ class _Builder:
         for column in self.columns:
             bottom = top - GAP_Y
             group = object()
+            above = None
             for box in column:
                 header = 0
                 if (not box.dummy and box.group != group
-                        and (box.column == AMP or box.group is not None)):
+                        and (box.logical == AMP or box.group is not None)):
                     group = box.group
                     header = self.groups[group].head
-                wanted = [s.from_box.slot_y(s) - (box.slot_y(s) - box.y) for s in box.ins
-                          if s.from_box.column == box.column - 1]
-                y = bottom + GAP_Y + header
+                lane = self.top_lane(box)       # packed at the top, wherever it comes from
+                wanted = [] if lane else [
+                    s.from_box.slot_y(s) - (box.slot_y(s) - box.y) for s in box.ins
+                    if s.from_box.column == box.column - 1]
+                gap = LANE_GAP if lane and above is not None and self.top_lane(above) else GAP_Y
+                above = box
+                y = bottom + gap + header
                 if wanted:
                     y = max(y, mean(wanted))
                 box.y = y
@@ -1086,13 +1158,91 @@ BUILDERS = {DEFAULT_SCHEME: _Builder, COMMS_SCHEME: _CommsBuilder}
 
 
 def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFAULT_SCHEME,
-           trunks=None):
+           trunks=None, wrap=False):
     """``hide_empty``: the columns left out when no box is in them (a tab
     passes ``ALL_COLUMNS``). ``label_max``: the widest a label line may be;
     a wider one makes the label a key. ``scheme``: which columns (the
     seven, or the Comms tab's three). ``trunks``: a prefix ("T") to draw the
-    lines leaving one port as one trunk, named with it and a number."""
-    b = BUILDERS[scheme](graph, hide_empty, label_max, trunks)
+    lines leaving one port as one trunk, named with it and a number.
+    ``wrap``: wrap a tall column into sub-columns while the tab then fits an
+    11x17 page at a larger scale."""
+    def build(split):
+        return _build(BUILDERS[scheme](graph, hide_empty, label_max, trunks, split), trunks)
+    plain, lay = build({})
+    b, split = plain, {}
+    for _ in range(WRAP_MAX if wrap else 0):
+        if _fit(lay) >= 1:
+            break
+        wider = _wider(plain, b, split)
+        if wider is None:
+            break
+        b2, lay2 = build(wider)
+        if _fit(lay2) < _fit(lay) * WRAP_GAIN:
+            break
+        b, lay, split = b2, lay2, wider
+    return lay
+
+
+def _fit(lay):
+    """The scale ``lay`` fits one 11x17 page at."""
+    return min(WRAP_PAGE[0] / lay.width, WRAP_PAGE[1] / lay.height)
+
+
+def _partition(heights, n):
+    """``heights`` in ``n`` consecutive runs, the tallest as short as can
+    be: (that height, where each run starts)."""
+    count = len(heights)
+    total = [0]
+    for h in heights:
+        total.append(total[-1] + h)
+    # best[k][i]: the first i in k runs -> (tallest, starts)
+    best = [{0: (0, ())}]
+    for k in range(1, n + 1):
+        row = {}
+        for i in range(k, count - (n - k) + 1):
+            row[i] = min((max(best[k - 1][j][0], total[i] - total[j]), best[k - 1][j][1] + (j,))
+                         for j in best[k - 1] if j < i)
+        best.append(row)
+    return best[n][count]
+
+
+def _wider(plain, b, split):
+    """``split`` with one more sub-column in the tallest column of ``b``,
+    or None when its boxes are already one each. ``plain``: the same tab's
+    builder with nothing wrapped, for the boxes' order and heights."""
+    bottoms = {}
+    for box in b.boxes.values():
+        if not box.dummy:
+            bottoms[box.logical] = max(bottoms.get(box.logical, 0), box.y + box.h)
+    if not bottoms:
+        return None
+    c = max(bottoms, key=lambda k: (bottoms[k], -k))
+    n = len(b.subs(c)) + 1
+    boxes = [box for box in plain.columns[plain.first[c]] if not box.dummy]
+    if n > len(boxes):
+        return None
+    groups = []                     # runs of boxes under one header
+    for box in boxes:
+        if groups and groups[-1][0].group == box.group:
+            groups[-1].append(box)
+        else:
+            groups.append([box])
+
+    def cut(units):
+        heights = [sum(box.h + GAP_Y for box in unit) + GROUP_HEAD for unit in units]
+        tallest, starts = _partition(heights, n)
+        return tallest, [[box for unit in units[a:z] for box in unit]
+                         for a, z in zip(starts, starts[1:] + (len(units),))]
+    tallest, runs = cut([[box] for box in boxes])
+    if len(groups) >= n:
+        whole, whole_runs = cut(groups)
+        if whole <= tallest * WRAP_GROUP_SLACK:
+            runs = whole_runs
+    return {**split, c: {box.id: k for k, run in enumerate(runs) for box in run}}
+
+
+def _build(b, trunks):
+    """(the builder, its Layout), everything placed and routed."""
     b.build()
     b.fit_labels()
     b.order()
@@ -1102,13 +1252,13 @@ def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFA
     routes = b.routes()
     trunks = b.trunks(routes) if trunks is not None else []
     boxes = [box for column in b.columns for box in column if not box.dummy]
-    shown = [b.column_x[c] for c in range(len(b.titles)) if c not in b.hidden]
+    drawn = [p for p in range(len(b.columns)) if p not in b.hidden]
+    shown = [b.column_x[p] for p in drawn]
     width = (max(shown) if shown else MARGIN) + BOX_W + MARGIN
     height = max([box.y + box.h for box in boxes] + [MARGIN + TITLE_H]) + MARGIN
-    columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(b.titles)
-               if c not in b.hidden]
+    columns = [(b.title(p), b.column_x[p], BOX_W) for p in drawn]
     groups = sorted((g for g in b.groups.values()
                      if any(box.group == g.key for box in b.columns[g.column])),
                     key=lambda g: (g.column, g.rank))
-    return Layout(width, height, columns, boxes, groups, routes,
-                  [e['id'] for e in b.not_drawn], trunks)
+    return b, Layout(width, height, columns, boxes, groups, routes,
+                     [e['id'] for e in b.not_drawn], trunks)
