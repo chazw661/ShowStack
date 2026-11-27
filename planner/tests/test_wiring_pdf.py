@@ -266,7 +266,8 @@ class WiringPdfTests(WiringShow, TestCase):
         text = pages[0]
         for word in ('Stage Box', 'FOH Desk', 'SL P1', 'SL Amp', 'DEVICE INPUTS',
                      '(mics & sources plug in here)', '(feeds processors, amps, IEMs)',
-                     'AES 1 ← SL P1 AES 1 (Main L)', 'XLR 1 ← Stage Box Out 3 (Fill)',
+                     'AES 1 ← SL P1 AES Out 1 (Main', 'XLR 1 ← Stage Box Analog Out 3',
+                     'Ch 1 ← Stage Box In 1', 'Analog Out 3', 'AES Out 2', 'Aux 1',
                      'Confirmed (linked on a page)'):
             self.assertIn(word, text)
         self.assertNotIn('…', ''.join(pages))
@@ -275,11 +276,11 @@ class WiringPdfTests(WiringShow, TestCase):
         self.p1_out(self.sl, 'AVB', 2, 'Delay')
         self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
         _, on = self.pdf(tabs='overview', network='1')
-        self.assertIn('Stream 2', on[0])
+        self.assertIn('SL Amp AVB Ch 2', on[0])
         # Off unless asked for: no parameter (the panel's box unticked), or 0.
         for params in ({}, {'network': '0'}):
             _, off = self.pdf(tabs='overview', **params)
-            self.assertNotIn('Stream 2', off[0])
+            self.assertNotIn('SL Amp AVB Ch 2', off[0])
         self.assertIn('AVB ← SL P1 stream 2 (Delay)', re.sub(r'\s+', ' ', off[0]))
 
     def test_keys_and_the_connections_table(self):

@@ -212,8 +212,12 @@ class CommDeviceBrowserTests(CommFixture, StaticLiveServerTestCase):
         })""")
         for x0, _, x1, _ in ends:
             self.assertLess(x0, x1)
+        # One row, named on each side a line attaches: its receive arrives on
+        # the left, its send leaves on the right.
         row = page.locator('svg.wd-svg text[data-slot="4W 1"]')
-        self.assertEqual(row.count(), 1)
+        self.assertEqual(row.count(), 2)
+        self.assertEqual(page.locator(
+            'svg.wd-svg text[data-slot="4W 1"][data-side="out"][text-anchor="end"]').count(), 1)
         self.assertEqual(self.errors, [])
 
         Device.objects.filter(pk=self.rio.pk).update(dante_network='')

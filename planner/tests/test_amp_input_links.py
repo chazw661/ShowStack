@@ -490,4 +490,4 @@ class BareNumberAndLabelTests(ConnectionFixtures, TestCase):
         lay = L.layout(project_graph(self.project))
         [route] = lay.routes
         self.assertNotIn('· →', route.label)
-        self.assertEqual(route.label, '? AVB 1')     # the slot names the input (PR 3.2)
+        self.assertEqual(route.label, '? AVB 1 · Amp AVB Ch 1')     # the far end, after the text

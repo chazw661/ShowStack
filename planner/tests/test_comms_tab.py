@@ -80,14 +80,15 @@ class CommsViewTests(CommsShow, TestCase):
         view = self.view()
         self.assertEqual([(e['from_ports'], e['to_ports'], e['transports'][0], e['label'])
                           for e in view['edges']], [
-            ('Dante Out 1', 'Out 3', 'dante', ''),               # from the Arcadia, by row
-            ('Dante Out 2', 'Out 1', 'dante', ''),
-            ('Dante Out 3', 'Dante In 1', 'dante', ''),
-            ('4W 1', 'In 3', 'analog', '4W adapter'),
-            ('2W 1', '', 'analog', 'XLR3'),
-            ('In 1', 'Dante In 2', 'dante', ''),                 # DVS FOH
-            ('In 3', 'Dante In 1', 'dante', ''),                 # MK88
-            ('Out 5', '4W 1', 'analog', '4W adapter'),           # Rio SL
+            # from the Arcadia, by row; a label names the far end, then the cable
+            ('Dante Out 1', 'Out 3', 'dante', 'MK88 Out 3'),
+            ('Dante Out 2', 'Out 1', 'dante', 'DVS FOH Out 1'),
+            ('Dante Out 3', 'Dante In 1', 'dante', 'Arcadia B Dante In 1'),
+            ('4W 1', 'In 3', 'analog', 'Rio SL In 3 · 4W adapter'),
+            ('2W 1', '', 'analog', 'XLR3'),                      # 2-wire: its cable only
+            ('In 1', 'Dante In 2', 'dante', 'Arcadia Dante In 2'),          # DVS FOH
+            ('In 3', 'Dante In 1', 'dante', 'Arcadia Dante In 1'),          # MK88
+            ('Out 5', '4W 1', 'analog', 'Arcadia 4W 1 · 4W adapter'),       # Rio SL
         ])
         rows = {n['label']: {box: [r['label'] for r in rs] for box, rs in n['rows'].items()}
                 for n in view['nodes'] if 'rows' in n}
@@ -185,7 +186,12 @@ class CommsLayoutTests(CommsShow, TestCase):
         self.assertEqual(recv.points[-1][1], send.points[0][1])
         row = arc.slots.index('4W 1')
         self.assertEqual(recv.points[-1][1], arc.row_y(row))
-        self.assertEqual((send.lines, recv.lines), (['4W adapter'], ['4W adapter']))
+        self.assertEqual((send.lines, recv.lines),
+                         (['Rio SL In 3 · 4W adapter'], ['Arcadia 4W 1 · 4W adapter']))
+        # the row is named on both sides: its receive arrives, its send leaves
+        self.assertEqual(sorted((anchor, x) for anchor, x, _, _, name in arc.port_texts()
+                                if name == '4W 1'),
+                         [('end', arc.x + arc.w - L.PORT_PAD), ('start', arc.x + L.PORT_PAD)])
 
     def test_dante_in_rows_take_lines_on_the_left_dante_out_and_2w_on_the_right(self):
         view = self.view()

@@ -2,7 +2,7 @@
 
 Every name in it is user data (device names, labels, PA Destination text, amp
 input text), so every text node and attribute value goes through ``_e`` --
-input slot labels too, which name their source ("XLR 1 ← Y001 Out 3 (Left)"). No
+port names too, which name their source ("XLR 1 ← Y001 Analog Out 3 (Left)"). No
 script, no external references; the styles are inline so the file stands on
 its own. Nothing is shortened: ``layout`` has wrapped every text into lines,
 and a line or tspan is drawn per line. Each box and line keeps its full text
@@ -67,13 +67,12 @@ def _lines(lines, x, line_h):
 
 
 def _slots(box):
+    """Every port name in the box: left-aligned where a line arrives,
+    right-aligned (``data-side="out"``) where one leaves."""
     out = []
-    x = box.x + 8
-    for i, (label, lines) in enumerate(zip(box.slots, box.slot_lines)):
-        if not label:
-            continue
-        y = box.row_y(i)
-        out.append(f'<text class="p" data-slot="{_e(label)}" x="{_n(x)}" y="{_n(y + 3.5)}">'
+    for anchor, x, y, lines, label in box.port_texts():
+        side = ' data-side="out" text-anchor="end"' if anchor == 'end' else ''
+        out.append(f'<text class="p" data-slot="{_e(label)}"{side} x="{_n(x)}" y="{_n(y)}">'
                    f'{_lines(lines, x, SLOT_LH)}</text>')
     return ''.join(out)
 

@@ -77,9 +77,10 @@ class BEdgeTests(BShow, TestCase):
     def test_b_links_are_their_own_edges_with_the_b_label(self):
         g = self.graph()
         a = [e for e in g['edges'] if not e.get('b') and e['from'].startswith('device:')]
-        self.assertEqual([e['label'] for e in a], ['In 1 → Ch 1'])
+        self.assertEqual([(e['from_ports'], e['label']) for e in a], [('In 1', 'FOH Desk Ch 1')])
         labels = sorted(e['label'] for e in self.b_edges(g))
-        self.assertEqual(labels, ['In 1–2 → Ch 2–3 (B)', 'In 2 → Ch 1 (B) · Kick wireless'])
+        self.assertEqual(labels, ['FOH Desk Ch 1 (B) · Kick wireless', 'FOH Desk Ch 2–3 (B)'])
+        self.assertEqual(sorted(e['from_ports'] for e in self.b_edges(g)), ['In 1–2', 'In 2'])
         edge = next(e for e in self.b_edges(g) if 'Kick' in e['label'])
         self.assertEqual(edge['sources'], [{'kind': 'fk', 'field': 'DeviceInput.console_input_b',
                                             'count': 1}])
@@ -96,8 +97,8 @@ class BEdgeTests(BShow, TestCase):
                           (dante, f'console:{self.desk.pk}', True)])
         self.assertEqual(sum(p[0] == f'device:{self.madi.pk}' for p in pairs), 1)
 
-    def test_a_label_format_is_unchanged(self):
-        self.assertIn('In 1 → Ch 1', [e['label'] for e in self.graph()['edges']])
+    def test_an_a_label_has_no_b_mark(self):
+        self.assertIn('FOH Desk Ch 1', [e['label'] for e in self.graph()['edges']])
 
     def test_source_b_text_never_makes_a_link(self):
         DeviceInput.objects.filter(device=self.dante, input_number=2).update(console_input_b=None)
@@ -111,8 +112,8 @@ class BEdgeTests(BShow, TestCase):
         dante = self.b_edges(T.graph_view(g, T.DANTE))
         analog = self.b_edges(T.graph_view(g, T.ANALOG))
         self.assertEqual(len(overview), 2)
-        self.assertEqual([e['label'] for e in dante], ['In 2 → Ch 1 (B) · Kick wireless'])
-        self.assertEqual([e['label'] for e in analog], ['In 1–2 → Ch 2–3 (B)'])
+        self.assertEqual([e['label'] for e in dante], ['FOH Desk Ch 1 (B) · Kick wireless'])
+        self.assertEqual([e['label'] for e in analog], ['FOH Desk Ch 2–3 (B)'])
         self.assertEqual(self.b_edges(T.graph_view(g, T.SPEAKERS)), [])
 
     def test_a_device_patched_only_on_b_is_on_its_tab(self):
@@ -174,8 +175,8 @@ class BEdgeTests(BShow, TestCase):
             warnings.simplefilter('ignore')
             pages = [p.extract_text() or '' for p in PdfReader(io.BytesIO(r.content)).pages]
         text = ' '.join(' '.join(pages).split())
-        self.assertIn('In 2 → Ch 1 (B) · Kick wireless', text)
-        self.assertIn('In 1–2 → Ch 2–3 (B)', text)
+        self.assertIn('FOH Desk Ch 1 (B) · Kick wireless', text)
+        self.assertIn('FOH Desk Ch 2–3 (B)', text)
         self.assertIn('B input (lighter; labelled “(B)”)', text)
         # Lighter: the line at 45%, its label at 80%, as on screen.
         line = wiring_pdf._cascade(wiring_pdf.EDGE_STYLES, ('confirmed', 'b'))
@@ -213,7 +214,7 @@ class BEdgeTests(BShow, TestCase):
             for line in faded:
                 self.assertIn(line.dxf.layer, [names[r] for r in (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED)], tab)
             texts = [e.plain_text() for e in msp.query('TEXT')]
-            self.assertTrue(any('(B)' in t for t in texts if '→' in t), tab)
+            self.assertTrue(any(t.startswith('FOH Desk Ch') and '(B)' in t for t in texts), tab)
             self.assertIn(dxf.B_LEGEND[0], texts)
         self.assertEqual(dxf.edge_layer(T.DANTE, ('confirmed', 'network', 'b'), {}), dxf.CONFIRMED)
         self.assertEqual(dxf.edge_layer(T.DANTE, ('confirmed', 'network'), {}), dxf.NETWORK)

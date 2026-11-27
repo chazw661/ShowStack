@@ -102,7 +102,7 @@ class WiringViewTests(WiringShow, TestCase):
         self.assertIn('unlinked:text:nowhere', boxes)
         labels = [' '.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')
                   if 'wd-label' in (t.get('class') or '')]
-        self.assertIn('Out 2', labels)
+        self.assertIn('SL P1 AES 1', labels)
         self.assertIn("HL · 2× NL 4 100'", labels)
         self.assertTrue(any(l.startswith('? Delay') for l in labels))
 

@@ -59,8 +59,8 @@ class LAmpSlotsStayNumberedTests(ConnectionFixtures, TestCase):
         node = next(n for n in graph['nodes'] if n['id'] == f'amp:{amp.pk}')
         self.assertEqual([s['label'] for s in node['slots']],
                          ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
-                          'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1, 4',
-                          'AES 2 ← SL P1 AES 1 (Main L)'])
+                          'XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1, 4',
+                          'AES 2 ← SL P1 AES Out 1 (Main L)'])
         drawn = next(b for b in L.layout(graph).boxes if b.node == node['id'])
         self.assertEqual(drawn.slots, [s['label'] for s in node['slots']])
         self.assertNotIn('IN ', ' '.join(texts(svg.render(L.layout(graph)))))
@@ -112,7 +112,7 @@ class NetworkToggleTests(NetworkShow, TestCase):
         # channel 1's AVB row still names its stream, once
         self.assertTrue(any(t.startswith('AVB ← SL P1 stream 2') for t in slots), slots)
         self.assertNotIn('Stream 2', ' '.join(slots))
-        self.assertIn('AES 1', slots)
+        self.assertIn('AES 1 ← SL P1 AES Out 1 (Main L)', slots)
 
     def test_the_layout_is_recomputed(self):
         graph = project_graph(self.project)
@@ -140,11 +140,12 @@ class LongShow(ConnectionFixtures):
     box, one bus group too long for a line, a long PA run, long titles."""
 
     LONG_NAME = 'Upstage Left Wireless Receiver Rack Number Two Spare'
+    BOX = 'Stage Box With A Rather Long Descriptive Name'
 
     def setUp(self):
         super().setUp()
         self.desk = self.console(self.LONG_NAME)
-        self.box = self.device('Stage Box With A Rather Long Descriptive Name')
+        self.box = self.device(self.BOX)
         for n in (1, 2):
             bus = ConsoleAuxOutput.objects.create(console=self.desk, aux_number=str(n), name=f'Wedge {n}')
             self.device_output(self.box, n, f'Wedge {n}', bus=bus)
@@ -166,6 +167,10 @@ class LongShow(ConnectionFixtures):
         graph = T.graph_view(project_graph(self.project), tab)
         return graph, L.layout(graph, **T.layout_options(tab))
 
+    def wide(self):
+        """The Overview with room for the long box name on one label line."""
+        return L.layout(project_graph(self.project), label_max=560)
+
 
 class NothingCutShortTests(LongShow, TestCase):
     def test_no_ellipsis_in_any_svg_text_on_any_tab(self):
@@ -175,25 +180,62 @@ class NothingCutShortTests(LongShow, TestCase):
                 self.assertNotIn('…', text, tab)
 
     def test_bus_groups_are_one_line_each(self):
+        lay = self.wide()
+        route = next(r for r in lay.routes if r.to_node == f'device:{self.box.pk}')
+        self.assertEqual(route.lines, [f'{self.BOX} Out 1–2', f'{self.BOX} Out 3'])
+        self.assertIsNone(route.key)
+        self.assertEqual(route.label_full, f'{self.BOX} Out 1–2 · {self.BOX} Out 3')
+        # ... and the buses are named in the console box, where the line leaves
+        desk = next(b for b in lay.boxes if b.node == f'console:{self.desk.pk}')
+        self.assertIn(['Aux 1–2', 'Mtx 1'], desk.out_text)
+
+    def test_a_label_too_wide_for_a_line_becomes_a_key(self):
         _, lay = self.draw()
         route = next(r for r in lay.routes if r.to_node == f'device:{self.box.pk}')
-        self.assertEqual(route.lines, ['Aux 1–2 → Out 1–2', 'Mtx 1 → Out 3'])
-        self.assertIsNone(route.key)
-        self.assertEqual(route.label_full, 'Aux 1–2 → Out 1–2 · Mtx 1 → Out 3')
-
-    def test_a_group_too_wide_for_a_line_becomes_a_key(self):
-        _, lay = self.draw()
-        route = next(r for r in lay.routes if r.to_node == f'device:{self.far.pk}')
-        other = next(r for r in lay.routes if r.to_node == f'device:{self.far_2.pk}')
         self.assertEqual(route.lines, [f'[{route.key}]'])
-        self.assertEqual(lay.keys, sorted([(route.key, route.id), (other.key, other.id)]))
-        self.assertIn('Aux 11, 13', route.label_full)      # the tooltip keeps it all
+        self.assertEqual(lay.keys, [(route.key, route.id)])
+        self.assertIn(f'{self.BOX} Out 3', route.label_full)      # the tooltip keeps it all
+
+    def test_a_long_run_of_ports_wraps_inside_its_box(self):
+        _, lay = self.draw()
+        desk = next(b for b in lay.boxes if b.node == f'console:{self.desk.pk}')
+        for far in (self.far, self.far_2):
+            route = next(r for r in lay.routes if r.to_node == f'device:{far.pk}')
+            self.assertEqual(route.lines, [f'{far.name} Out 1–25'])    # the far end is short
+        ports = [' '.join(lines) for lines in desk.out_text if len(lines) > 2]
+        self.assertEqual(len(ports), 2)
+        self.assertTrue(ports[0].startswith('Aux 11, 13, 15') and ports[0].endswith('57, 59'), ports)
+        self.assertTrue(ports[1].startswith('Aux 101, 103') and ports[1].endswith('147, 149'), ports)
+        for lines in desk.out_text:
+            for line in lines:
+                self.assertLessEqual(L.text_width(line, L.SLOT_CHAR_W), L.TEXT_W)
+
+    def test_port_names_stay_inside_their_box_and_clear_of_each_other(self):
+        for tab in T.TAB_KEYS:
+            _, lay = self.draw(tab)
+            for box in lay.boxes:
+                drawn = []
+                for anchor, x, y, lines, name in box.port_texts():
+                    for i, line in enumerate(lines):
+                        w = L.text_width(line, L.SLOT_CHAR_W)
+                        x0 = x - w if anchor == 'end' else x
+                        base = y + i * L.SLOT_LH
+                        drawn.append((x0, base - 8, x0 + w, base + 2, name))
+                for x0, y0, x1, y1, name in drawn:
+                    self.assertGreaterEqual(x0, box.x, f'{tab}: {name}')
+                    self.assertLessEqual(x1, box.x + box.w, f'{tab}: {name}')
+                    self.assertGreaterEqual(y0, box.y + box.head - L.SLOT, f'{tab}: {name}')
+                    self.assertLessEqual(y1, box.y + box.h, f'{tab}: {name}')
+                for i, a in enumerate(drawn):
+                    for b in drawn[i + 1:]:
+                        self.assertFalse(a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3],
+                                         f'{tab}: {a[4]} / {b[4]}')
 
     def test_a_key_is_a_badge_on_the_line_next_to_its_source_box(self):
         _, lay = self.draw()
         desk = next(b for b in lay.boxes if b.node == f'console:{self.desk.pk}')
         keyed = [r for r in lay.routes if r.key]
-        self.assertEqual(len(keyed), 2)
+        self.assertEqual(len(keyed), 1)
         for route in keyed:
             x0, y0, x1, y1 = route.badge
             line_y = route.points[0][1]
@@ -211,10 +253,10 @@ class NothingCutShortTests(LongShow, TestCase):
         self.assertLess(link.index('class="wd-edge'), link.index('class="wd-key"'))
 
     def test_a_badge_clears_the_labels_beside_it(self):
-        # [1], [2] and a two-line label leave one box one under another.
+        # [1] and two one-line labels leave one box one under another.
         _, lay = self.draw()
         from_desk = [r for r in lay.routes if r.from_node == f'console:{self.desk.pk}']
-        self.assertEqual(sorted(bool(r.key) for r in from_desk), [False, True, True])
+        self.assertEqual(sorted(bool(r.key) for r in from_desk), [False, False, True])
         for route in (r for r in from_desk if r.key):
             _, top, _, bottom = route.badge
             for other in from_desk:
@@ -257,7 +299,7 @@ class NothingCutShortTests(LongShow, TestCase):
                                      f'{tab}: {a.lines} / {b.lines}')
 
     def test_a_stacked_label_stays_above_its_line_and_inside_its_row(self):
-        _, lay = self.draw()
+        lay = self.wide()
         route = next(r for r in lay.routes if r.to_node == f'device:{self.box.pk}')
         desk = next(b for b in lay.boxes if b.node == route.from_node)
         boxes = route.line_boxes()
@@ -288,9 +330,9 @@ class ConnectionsTableTests(LongShow, TestCase):
         for key in drawn:
             self.assertIn(f'>[{key}]</text>', svg)
             self.assertIn(f'<td class="k"><span class="wd-keybadge">[{key}]</span></td>', html)
-        row = next(r for r in response.context['connections'] if r['to'].startswith('Far Box ·'))
-        self.assertTrue(row['from'].startswith(f'{self.LONG_NAME} · Aux 11, 13'))
-        self.assertEqual(row['to'], 'Far Box · Out 1–25')
+        [row] = response.context['connections']
+        self.assertEqual(row['from'], f'{self.LONG_NAME} · Aux 1–2, Mtx 1')
+        self.assertEqual(row['to'], f'{self.BOX} · Out 1–3')
         self.assertEqual(row['cable'], 'Not known')
 
     def test_the_page_prints_the_diagram_whole_with_the_keys_boxed(self):

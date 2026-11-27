@@ -33,10 +33,17 @@ Ordering is barycenter: a few sweeps sorting each column by the mean position
 of its neighbours in the column before (then after). In the amp column the
 sort is only within a location group; groups never move.
 
-A box's lines meet it on port slots SLOT apart. Amps and processors have
-named input slots (the graph's ``slots``: "XLR 1 ← Y001 Out 3 (Left)"), drawn
-inside the box's left edge in input order, and an edge lands on its
-``to_slot``; elsewhere a box has one slot per line, ordered to cross least.
+A box's lines meet it on port slots SLOT apart, and every device box names
+its own port where a line attaches: a line arriving, at the box's left edge;
+a line leaving, right-aligned at its right edge -- by the line's direction,
+never by the port's name. A line arrives on a named input slot (the graph's
+``slots``: "XLR 1 ← Y001 Analog Out 3 (Left)", in input order; the edge's
+``to_slot``). It leaves from a row of its source ports (the node's
+``out_slots``, the edge's ``from_slot``), in port order; lines leaving the
+same ports are consecutive rows and the ports are named once, on the first.
+A box with names on both sides stacks them: its input slots, then its output
+rows below, so neither runs into the other. A box with no named port (an amp
+rack, a speaker) has one slot per line, ordered to cross least.
 
 Routing is orthogonal: out of the source's right side, along to a vertical
 track of its own in the gap, then along into the target's left side. Every
@@ -69,8 +76,12 @@ builds its graph): three columns instead of the seven --
 Every box there is in port-row mode: its rows are named ports (the node's
 ``rows``), drawn inside it, and a line meets the box on its port's row -- in
 on the left (``to_slot``), out on the right (``from_slot``), so a 4-wire
-port's receive and send are on one row at one height. A device patched both
-ways is two boxes, left and right, and every route still runs rightward.
+port's receive and send are on one row at one height. A row is named on the
+side its line attaches (a 4-wire row with both, on both). A device patched
+both ways is two boxes, left and right, and every route still runs rightward.
+
+``Box.port_texts()`` is every port name of a box, placed and aligned; the
+screen, the PDF and the DXF all draw that one list.
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -110,6 +121,8 @@ CHAR_W = 6.4        # 11px label text, a generous average
 TITLE_CHAR_W = 7.2  # 600 12px box titles
 SLOT_CHAR_W = 5.9   # 10px slot names
 TEXT_W = BOX_W - 16  # inside a box
+PORT_PAD = 8        # a port name's gap from the box edge its line attaches to
+PORT_DY = 3.5       # its baseline below the line
 LABEL_MAX = 300
 LABEL_LINES_MAX = 6
 KEY_CHAR_W = 7.2    # bold 11px key text
@@ -150,6 +163,9 @@ class Box:
     out_h: list = field(default_factory=list)   # each output row's height (its label's lines)
     out_line: list = field(default_factory=list)  # where in its row each output's line runs
     out_slot: dict = field(default_factory=dict)  # port-row mode: segment -> the row it leaves from
+    slot_side: list = field(default_factory=list)  # port-row mode: each row's 'in' / 'out' / 'both'
+    out_text: list = field(default_factory=list)  # each output row's port name, wrapped ([] = none)
+    out_top: float = 0          # output rows start this far below the head (under named inputs)
 
     @property
     def dummy(self):
@@ -204,7 +220,30 @@ class Box:
         """Output row ``i``'s line: under its label's lines, or through the
         middle of a key badge's row."""
         line = self.out_line[i] if i < len(self.out_line) else SLOT / 2
-        return self.y + self.head + sum(_rows(self.out_h, i)) + line
+        return self.y + self.head + self.out_top + sum(_rows(self.out_h, i)) + line
+
+    def port_texts(self):
+        """[(anchor, x, y, lines, full text)]: every port name in the box.
+        ``anchor`` 'start': drawn from ``x`` (a line arrives there); 'end':
+        ending at ``x`` (a line leaves there). ``y`` is the first line's
+        baseline, the rest SLOT_LH apart below it."""
+        left, right = self.x + PORT_PAD, self.x + self.w - PORT_PAD
+        out = []
+        for i, (label, lines) in enumerate(zip(self.slots, self.slot_lines)):
+            if not label:
+                continue
+            side = self.slot_side[i] if i < len(self.slot_side) else 'in'
+            y = self.row_y(i) + PORT_DY
+            if side != 'out':
+                out.append(('start', left, y, lines, label))
+            if side != 'in':
+                out.append(('end', right, y, lines, label))
+        for i, lines in enumerate(self.out_text):
+            if lines:
+                # Stacked upward: the last line is on the row's own line.
+                y = self.out_row_y(i) + PORT_DY - SLOT_LH * (len(lines) - 1)
+                out.append(('end', right, y, lines, ' '.join(lines)))
+        return out
 
     def slot_y(self, segment):
         if self.dummy:
@@ -531,26 +570,36 @@ class _Builder:
             box.outs.sort(key=lambda s: pos[s.to_box.id])
             if box.dummy:
                 continue
-            named = self.nodes.get(box.node, {}).get('slots')
+            node = self.nodes.get(box.node, {})
+            named = node.get('slots')
             rows = self.port_rows(box)
             if rows is not None:
                 self.name_rows(box, rows)
-            elif named:
-                self.name_slots(box, named)
+            else:
+                if named:
+                    self.name_slots(box, named)
+                self.name_outs(box, node.get('out_slots') or ())
             box.slot_lines = [wrap(label, TEXT_W, SLOT_CHAR_W) for label in box.slots]
             box.in_h = ([SLOT + SLOT_LH * (len(lines) - 1) for lines in box.slot_lines]
                         or [SLOT] * len(box.ins))
             box.out_h, box.out_line = [], []
-            for seg in box.outs:
+            for i, seg in enumerate(box.outs):
                 if seg.first and seg.edge['id'] in self.keys:
                     h, line = KEY_ROW, KEY_LINE
                 else:
                     lines = len(self.drawn_lines[seg.edge['id']]) if seg.first else 1
                     h = SLOT + LABEL_LH * (max(lines, 1) - 1)
                     line = h - SLOT / 2
+                # Room above the line for a wrapped port name.
+                names = len(box.out_text[i]) if i < len(box.out_text) else 0
+                need = SLOT / 2 + SLOT_LH * (max(names, 1) - 1)
+                if line < need:
+                    h, line = h + need - line, need
                 box.out_h.append(h)
                 box.out_line.append(line)
-            box.h = box.head + max(sum(box.in_h), sum(box.out_h), SLOT) + PAD
+            if any(box.slots) and any(box.out_text):
+                box.out_top = sum(box.in_h)     # names on both sides: outputs under inputs
+            box.h = box.head + max(sum(box.in_h), box.out_top + sum(box.out_h), SLOT) + PAD
 
     def port_rows(self, box):
         """The box's named port rows ([{id, label}]) when it is in port-row
@@ -568,6 +617,25 @@ class _Builder:
             box.out_slot[seg] = index[seg.edge['from_slot']]
         box.ins.sort(key=lambda s: box.in_slot[s])
         box.outs.sort(key=lambda s: box.out_slot[s])
+        ins, outs = set(box.in_slot.values()), set(box.out_slot.values())
+        box.slot_side = ['both' if i in ins and i in outs else 'out' if i in outs else 'in'
+                         for i in range(len(rows))]
+
+    def name_outs(self, box, named):
+        """The rows this box's lines leave from, in the graph's port order
+        (``out_slots``); lines leaving the same ports are consecutive and the
+        ports are named on the first only. A line with no source port (a PA
+        run) keeps its place after them, unnamed."""
+        order = {slot['id']: i for i, slot in enumerate(named)}
+        lines = {slot['id']: slot['lines'] for slot in named}
+        box.outs.sort(key=lambda s: order.get(s.edge.get('from_slot'), len(order)))
+        seen = set()
+        for seg in box.outs:
+            slot = seg.edge.get('from_slot')
+            first = slot in lines and slot not in seen
+            seen.add(slot)
+            box.out_text.append([part for line in lines[slot]
+                                 for part in wrap(line, TEXT_W, SLOT_CHAR_W)] if first else [])
 
     def name_slots(self, box, named):
         """The slots this box's lines use, in the graph's input order; a line

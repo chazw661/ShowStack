@@ -22,8 +22,9 @@ shows where it gets it without a console column.
 
 A 2-wire port with a destination typed is a row on its comm device and a
 line to a ``destination`` node of that text, labelled with its cable type.
-A line's own label is its cable type (a 4-wire's "4W adapter"); a Dante line
-has none.
+Any other line's label names its far end, device and port, then its cable
+type: "Arcadia 4W 1 · 4W adapter", "Arcadia Dante In 3". ``layout`` names
+each row on the side its line attaches.
 """
 ROW_ORDER = {'In': 0, 'Out': 1, 'Dante In': 0, 'Dante Out': 1, '4W': 2, '2W': 3}
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceOutput.console_output')
@@ -82,7 +83,9 @@ def comms_view(graph):
         for i, link in enumerate(edge['links']):
             row(frm, from_box, link['from_ref'], link['from_port'], link.get('from_name', ''))
             row(to, to_box, link['to_ref'], link['to_port'], link.get('to_name', ''))
-            label = link.get('cable_type', '')
+            label = ' · '.join(x for x in (
+                ' '.join(y for y in (nodes[to].get('label', ''), link['to_port']) if y),
+                link.get('cable_type', '')) if x)
             new_id = f"{edge['id']}.{i}"
             first.setdefault(edge['id'], new_id)
             edges.append({

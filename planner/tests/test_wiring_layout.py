@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, TestCase
 from planner.connections import layout as L
 from planner.connections import svg
 from planner.connections.graph import project_graph
-from planner.models import AmpLocation, ConsoleAuxOutput
+from planner.models import AmpLocation, Console, ConsoleAuxOutput
 from planner.tests.connection_fixtures import ConnectionFixtures
 
 SVG_NS = '{http://www.w3.org/2000/svg}'
@@ -104,10 +104,10 @@ class WiringLayoutTests(WiringShow, TestCase):
         sl, sl_amp = f'processor:{self.sl.pk}', f'amp:{self.sl_amp.pk}'
         self.assertEqual(self.route(box, desk).classes, ('confirmed',))
         bus = self.route(desk, box)
-        self.assertEqual(bus.label, 'Aux 1 → Out 1')
+        self.assertEqual(bus.label, 'Stage Box Out 1')
         self.assertEqual(bus.points[-1][0], self.boxes[f'{box}#out'].x)     # into the outputs box
         # the processor path
-        self.assertEqual(self.route(box, sl).label, 'Out 2')
+        self.assertEqual(self.route(box, sl).label, 'SL P1 AES 1')
         self.assertEqual(self.route(sl, sl_amp).classes, ('inferred',))
         # direct I/O -> amp starts at the outputs box
         direct = self.route(box, f'amp:{self.ff_amp.pk}')
@@ -130,7 +130,7 @@ class WiringLayoutTests(WiringShow, TestCase):
         self.assertEqual((target.column, target.style, target.label, target.sub),
                          (L.PROCESSOR, 'unlinked', 'Delay', 'ambiguous'))
         self.assertTrue(route.question)
-        self.assertEqual(route.label, '? Delay · Out 4')
+        self.assertEqual(route.label, '? Delay')     # its port is named in the source box
 
     # -- geometry -------------------------------------------------------------
 
@@ -368,16 +368,17 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         # the rack view's rows: channel n's AVB stream, XLR and AES inputs, each
         # with its whole patch (PR: wiring PDF, item 6)
         self.assertEqual(box.slots, ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
-                                     'XLR 1 ← Stage Box Out 1 (Fill)',
-                                     'AES 2 ← SL P1 AES 1 (Main L)'])
+                                     'XLR 1 ← Stage Box Analog Out 1 (Fill)',
+                                     'AES 2 ← SL P1 AES Out 1 (Main L)'])
         # a slot too long for one line wraps, and its row grows with it
         self.assertEqual(box.h, L.HEAD + sum(L.SLOT + L.SLOT_LH * (len(lines) - 1)
                                              for lines in box.slot_lines) + L.PAD)
         self.assertGreater(len(box.slot_lines[0]), 1)
         self.assertEqual([' '.join(lines) for lines in box.slot_lines], box.slots)
         self.assert_on_slots(box)
-        # the source end stays short; an AVB output is a stream
-        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['AES 1', 'Out 1', 'Stream 3'])
+        # each line's label names the amp input it lands on
+        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)),
+                         ['SL Amp AES 2', 'SL Amp AVB Ch 3', 'SL Amp XLR 1'])
 
     def test_edge_labels_into_amps_have_no_channel(self):
         self.device_output(self.box, 1, 'Fill')
@@ -390,8 +391,8 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.assertEqual(len(labels), 3)
         for label in labels:
             self.assertNotIn('→ Ch', label)
-            self.assertNotIn('Ch ', label)
-        self.assertIn('? AVB Nope', labels)
+        # An XLR / AES input is named by its number; an AVB feed has none.
+        self.assertEqual(sorted(labels), ['? AVB Nope · SL Amp AVB Ch 1–2', 'SL Amp AES 2', 'SL Amp XLR 1'])
         for edge in self.graph['edges']:
             if edge['to'] == self.amp_id:
                 self.assertNotIn('→', edge['label'])
@@ -404,7 +405,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.draw()
         box = self.boxes[self.amp_id]
         self.assertEqual(box.slots, ['AVB ← “Nope” (not linked) · Ch 1–2',
-                                     'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2, 4'])
+                                     'XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1–2, 4'])
         self.assertEqual(len(self.into(self.amp_id)), 2)
         self.assert_on_slots(box)
 
@@ -416,9 +417,10 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 3, analog_input='Left')
         self.draw()
         box = self.boxes[self.amp_id]
-        self.assertEqual(box.slots, ['XLR 1 ← Stage Box Out 1 (Left) · Ch 1, 3',
-                                     'XLR 2 ← Stage Box Out 2 (Right)'])
-        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['Out 1', 'Out 2'])
+        self.assertEqual(box.slots, ['XLR 1 ← Stage Box Analog Out 1 (Left) · Ch 1, 3',
+                                     'XLR 2 ← Stage Box Analog Out 2 (Right)'])
+        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)),
+                         ['SL Amp XLR 1', 'SL Amp XLR 2'])
         self.assert_on_slots(box)
 
     def test_processor_inputs_are_named_slots(self):
@@ -428,8 +430,10 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.device_output(self.box, 2, 'Fill')
         self.draw()
         box = self.boxes[f'processor:{self.sl.pk}']
-        self.assertEqual(box.slots, ['AES 1', 'Analog 2'])
-        self.assertEqual(sorted(r.label for r in self.into(box.node)), ['Out 1', 'Out 2'])
+        self.assertEqual(box.slots, ['AES 1 ← Stage Box AES Out 1 (Main L)',
+                                     'Analog 2 ← Stage Box Analog Out 2 (Fill)'])
+        self.assertEqual(sorted(r.label for r in self.into(box.node)),
+                         ['SL P1 AES 1', 'SL P1 Analog 2'])
         self.assert_on_slots(box)
 
     def test_the_svg_draws_each_slot_label(self):
@@ -443,9 +447,82 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         # a wrapped slot is drawn as tspans; its text reads whole
         full = {t.get('data-slot'): ''.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')
                 if t.get('class') == 'p'}
-        self.assertEqual(full, {'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2':
-                                'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2', 'AES 1': 'AES 1'})
-        self.assertEqual(slots['AES 1'], 'AES 1')
+        names = ['XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1–2', 'AES 1 ← Stage Box AES Out 1 (Fill)',
+                 'AES Out 1', 'Analog Out 1']
+        self.assertEqual(full, {name: name for name in names})
+        self.assertEqual(slots['AES Out 1'], 'AES Out 1')
+        # where a line leaves, the port is right-aligned at the box's right edge
+        sides = {t.get('data-slot'): (t.get('data-side'), t.get('text-anchor'))
+                 for t in root.iter(f'{SVG_NS}text') if t.get('class') == 'p'}
+        self.assertEqual(sides, {names[0]: (None, None), names[1]: (None, None),
+                                 names[2]: ('out', 'end'), names[3]: ('out', 'end')})
+
+    # -- source ports: named inside the box, where the line leaves ---------------
+
+    def one_output_to_many(self):
+        """Out 1 feeds a processor over AES and three amp inputs as analog;
+        Out 2 feeds one amp input; a console bus feeds Out 1."""
+        desk = self.console('FOH Desk')
+        bus = ConsoleAuxOutput.objects.create(console=desk, aux_number='1', name='Left')
+        self.device_output(self.box, 1, 'Left', bus=bus)
+        self.device_output(self.box, 2, 'Right')
+        self.device_input(self.box, 1, self.channel(desk, 1, 'Kick'))
+        self.p1_in(self.sl, 'AES', 1, 'Left')
+        self.amps = [self.amp_, self.amp('SR Amp'), self.amp('Fill Amp')]
+        for amp in self.amps:
+            self.amp_channel(amp, 1, analog_input='Left')
+        self.amp_channel(self.amp_, 2, analog_input='Right')
+        self.draw()
+        return self.boxes[f'device:{self.box.pk}#out']
+
+    def test_a_port_feeding_several_lines_is_named_once(self):
+        box = self.one_output_to_many()
+        # in port order, one row per line; the rows under a name are the same port
+        self.assertEqual(box.out_text,
+                         [['AES Out 1'], ['Analog Out 1'], [], [], ['Analog Out 2']])
+        edges = {e['id']: e for e in self.graph['edges']}
+        self.assertEqual([edges[s.edge['id']]['from_ports'] for s in box.outs],
+                         ['AES Out 1', 'Analog Out 1', 'Analog Out 1', 'Analog Out 1',
+                          'Analog Out 2'])
+        # every line still says where it goes
+        self.assertEqual(sorted(r.label for r in self.lay.routes if r.from_node == box.node
+                                and r.to_node != f'console:{self.console_pk()}'),
+                         ['Fill Amp XLR 1', 'SL Amp XLR 1', 'SL Amp XLR 2', 'SL P1 AES 1',
+                          'SR Amp XLR 1'])
+
+    def console_pk(self):
+        return Console.objects.get(project=self.project, name='FOH Desk').pk
+
+    def test_a_source_port_is_right_aligned_on_its_line(self):
+        box = self.one_output_to_many()
+        right = [t for t in box.port_texts() if t[0] == 'end']
+        self.assertEqual([t[4] for t in right], ['AES Out 1', 'Analog Out 1', 'Analog Out 2'])
+        rows = [i for i, lines in enumerate(box.out_text) if lines]
+        for (_, x, y, _, _), i in zip(right, rows):
+            self.assertEqual(x, box.x + box.w - L.PORT_PAD)
+            self.assertAlmostEqual(y, box.out_row_y(i) + L.PORT_DY)
+            route = next(r for r in self.lay.routes if r.id == box.outs[i].edge['id'])
+            self.assertEqual(route.points[0], (box.x + box.w, box.out_row_y(i)))
+
+    def test_names_on_both_sides_are_stacked_inputs_over_outputs(self):
+        box = self.one_output_to_many()
+        self.assertEqual(box.slots, ['Out 1 ← FOH Desk Aux 1'])
+        self.assertEqual(box.out_top, sum(box.in_h))
+        left = [t for t in box.port_texts() if t[0] == 'start']
+        self.assertEqual([(t[1], t[4]) for t in left], [(box.x + L.PORT_PAD, 'Out 1 ← FOH Desk Aux 1')])
+        self.assertLess(box.row_y(0), box.out_row_y(0))
+        self.assertEqual(box.h, box.head + sum(box.in_h) + sum(box.out_h) + L.PAD)
+        # an amp names inputs only: its lines out (none here) would start level with them
+        self.assertEqual(self.boxes[self.amp_id].out_top, 0)
+
+    def test_the_side_is_the_lines_direction_not_the_ports_name(self):
+        self.one_output_to_many()
+        ins = self.boxes[f'device:{self.box.pk}#in']
+        # "In 1" feeds the console: the line leaves, so it is named on the right
+        self.assertEqual([(t[0], t[4]) for t in ins.port_texts()], [('end', 'In 1')])
+        desk = self.boxes[f'console:{self.console_pk()}']
+        self.assertEqual(sorted((t[0], t[4]) for t in desk.port_texts()),
+                         [('end', 'Aux 1'), ('start', 'Ch 1 ← Stage Box In 1')])
 
     def test_boxes_with_no_inputs_have_no_slots(self):
         self.amp_channel(self.amp_, 1)

@@ -576,8 +576,10 @@ class WiringTests(CommFixture, TestCase):
         graph = project_graph(self.project)
         comm = [e for e in graph['edges'] if e.get('comm')]
         self.assertEqual(sorted((e['label'], e['transports'][0]) for e in comm), [
-            ('4W 1 → In 3', 'analog'), ('Dante Out 2–3 → Out 3–4', 'dante'),
-            ('In 3 → Dante In 1', 'dante'), ('Out 5 → 4W 1', 'analog')])
+            ('Arcadia 4W 1', 'analog'), ('Arcadia Dante In 1', 'dante'),
+            ('MK88 Out 3–4', 'dante'), ('Rio SL In 3', 'analog')])
+        self.assertEqual(sorted(e['from_ports'] for e in comm),
+                         ['4W 1', 'Dante Out 2–3', 'In 3', 'Out 5'])
         self.assertTrue(all(e['status'] == 'confirmed' for e in comm))
         node = next(n for n in graph['nodes'] if n['label'] == 'Arcadia')
         self.assertEqual((node['device_kind'], node['dante_network']), ('comm', 'Comms 48k'))

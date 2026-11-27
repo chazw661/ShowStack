@@ -222,7 +222,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
     def test_ten_point_text_is_an_eighth_of_an_inch_and_a_box_keeps_its_shape(self):
         doc = self.dxf('overview')
         view = self.tab(T.OVERVIEW)
-        slot = 'XLR 1 ← Stage Box Out 3 (Fill)'
+        slot = 'Ch 1 ← Stage Box In 1'
         self.assertIn([slot], [lines for box in view['layout'].boxes for lines in box.slot_lines])
         [entity] = [e for e in doc.modelspace().query('TEXT') if e.plain_text() == slot]
         self.assertAlmostEqual(entity.dxf.height, 0.125, places=4)
@@ -307,8 +307,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
                 want += group.lines
             for box in lay.boxes:
                 want += [line for _, line, _ in box.text_rows]
-                want += [line for label, lines in zip(box.slots, box.slot_lines) if label
-                         for line in lines]
+                want += [line for _, _, _, lines, _ in box.port_texts() for line in lines]
             for route in lay.routes:
                 want += [f'[{route.key}]'] if route.key else route.lines
             got = texts(self.dxf(tab, network='1'), dxf.TEXT)
@@ -316,7 +315,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         # the boxes of the show, by name, and an arrow as text
         got = texts(self.dxf('overview'), dxf.TEXT)
         for name in ('FOH Desk', 'Stage Box', 'SL P1', 'SL Amp', 'K2 L', 'SL Racks', 'CONSOLE',
-                     '(mics & sources plug in here)', 'In 1 → Ch 1'):
+                     '(mics & sources plug in here)', 'Ch 1 ← Stage Box In 1'):
             self.assertIn(name, got)
 
     def test_the_title_block(self):
@@ -361,7 +360,8 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
 
     def test_keys_the_connections_table_and_warnings(self):
         # every other bus to every other output: a label far too wide for a line
-        for name, base in (('Far Box', 10), ('Far Box 2', 100)):
+        for name, base in (('Far Box Under The Upstage Left Riser Number One', 10),
+                           ('Far Box Under The Upstage Left Riser Number Two', 100)):
             far = self.device(name)
             for n in range(1, 50, 2):
                 bus = ConsoleAuxOutput.objects.create(console=self.desk, aux_number=str(n + base),
@@ -414,8 +414,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         plain = ' '.join(texts(self.dxf('overview', arrows='ascii')))
         self.assertNotIn('→', plain)
         self.assertNotIn('←', plain)
-        self.assertIn('In 1 -> Ch 1', plain)
-        self.assertIn('XLR 1 <- Stage Box Out 3 (Fill)', plain)
+        self.assertIn('Ch 1 <- Stage Box In 1', plain)
         self.assertEqual(got.replace('→', '->').replace('←', '<-'), plain)
 
     def test_hostile_names_are_text_and_the_file_still_reads(self):

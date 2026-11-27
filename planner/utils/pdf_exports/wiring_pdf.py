@@ -228,14 +228,13 @@ def _draw_box(c, w, tile, box):
                 draw_text(c, w.x(box.x + 8), w.y(y), line, SEMIBOLD, w.pt(12), INK, fit=fit)
             else:
                 draw_text(c, w.x(box.x + 8), w.y(y), line, REGULAR, w.pt(11), MUTED, fit=fit)
-    for i, (label, lines) in enumerate(zip(box.slots, box.slot_lines)):
-        if not label:
-            continue
-        y = box.row_y(i) + 3.5
+    # Port names: from the left edge where a line arrives, ending at the
+    # right edge where one leaves.
+    for anchor, x, y, lines, _ in box.port_texts():
         for j, line in enumerate(lines):
             ly = y + j * L.SLOT_LH
             if shown(ly):
-                draw_text(c, w.x(box.x + 8), w.y(ly), line, REGULAR, w.pt(10), LINE, fit=fit)
+                draw_text(c, w.x(x), w.y(ly), line, REGULAR, w.pt(10), LINE, anchor=anchor, fit=fit)
 
 
 def _draw_columns(c, w, tile, lay):
