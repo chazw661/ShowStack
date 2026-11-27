@@ -263,7 +263,14 @@ def crossings(plan_, routes):
             if prev is not None and tile != prev:
                 out.append(Crossing(route.id, x, y, prev, tile, direction))
             prev = tile
-    return out
+    # A trunk's branches share its stretches: one marker where they cross.
+    seen, once = set(), []
+    for c in out:
+        at = (round(c.x, 2), round(c.y, 2), c.leaves, c.enters, c.direction)
+        if at not in seen:
+            seen.add(at)
+            once.append(c)
+    return once
 
 
 def _owner_open(plan_, x, y):

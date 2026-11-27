@@ -42,6 +42,14 @@
   .wd-banner a { color: #ffd27a; }
   .wd-legend i.unset { border-top: 2px dotted #9a9a9a; }
   .wd-legend i.b { opacity: .45; }
+  .wd-legend i.stream { border-top-style: solid; box-shadow: 0 0 0 3px #fff; }
+  .wd-legend .wd-tap { display: inline-block; min-width: 10px; padding: 0 4px; border: 1.5px solid;
+                       border-radius: 9px; font: 700 10px/14px system-ui, sans-serif; text-align: center;
+                       color: #fff; box-shadow: 0 0 0 2px #fff; }
+  .wd-legend .wd-tap.hollow { background: #fff; }
+  .wd-legend-hint { color: #999; }
+  .wd-scroll svg [data-stream] { cursor: pointer; }
+  .wd-scroll svg.wd-focus [data-stream]:not(.wd-on) { opacity: .15; }
   .wd-switch { color: #eee; font-size: 13px; text-decoration: none; display: inline-flex;
                align-items: center; gap: 8px; }
   .wd-switch .knob { width: 30px; height: 16px; border-radius: 8px; background: #555; position: relative; }
@@ -92,6 +100,8 @@
     .wd-scroll svg { width: 100%; height: auto; }
     .wd-connections tr { break-inside: avoid; }
     .wd-keybadge { color: #000; border-color: #000; }
+    .wd-scroll svg.wd-focus [data-stream]:not(.wd-on) { opacity: 1; }
+    .wd-legend-hint { display: none; }
   }
 </style>
 {% endblock %}
@@ -155,10 +165,18 @@
       </details>
     </div>
     <div class="wd-legend" aria-label="Legend">
+      {% if stream_legend %}
+      <span><i class="stream" style="border-top-color: {{ stream_legend.colour }}"></i>One colour and name per stream</span>
+      <span><b class="wd-tap" style="background: {{ stream_legend.colour }}; border-color: {{ stream_legend.colour }}">{{ stream_legend.label }}</b>Confirmed</span>
+      <span><b class="wd-tap hollow" style="color: {{ stream_legend.colour }}; border-color: {{ stream_legend.colour }}">{{ stream_legend.label }}</b>Inferred from labels</span>
+      <span><i class="unlinked"></i>? Not linked or ambiguous</span>
+      <span class="wd-legend-hint">Hover or tap a stream to highlight it</span>
+      {% else %}
       <span><i></i>Confirmed (linked on a page)</span>
       <span><i class="inferred"></i>Inferred from labels</span>
       <span><i class="unlinked"></i>? Not linked or ambiguous</span>
       <span><i class="network"></i>AVB / Dante network (no cable)</span>
+      {% endif %}
       {% if show_b_legend %}<span><i class="b"></i>B input (lighter; labelled “(B)”)</span>{% endif %}
       {% if show_unset_legend %}<span><i class="unset"></i>Console connection not set</span>{% endif %}
     </div>
@@ -234,7 +252,39 @@
   var button = document.getElementById('wd-toggle');
   var box = document.getElementById('wd-scroll');
   if (!button || !box) return;
-  // Only a class on the container changes; the SVG itself is never touched.
+  // A tab drawn as trunks: hovering or tapping anything of a stream (its
+  // port, its lines, a badge, a receiver's slot) lights that stream and
+  // dims the others. A tap keeps it lit; the same tap again, a tap
+  // elsewhere on the diagram, or Escape clears it. data-stream is a number
+  // the server wrote; only classes change, no text or markup.
+  var diagram = box.querySelector('svg');
+  if (diagram && diagram.querySelector('[data-stream]')) {
+    var pinned = null;
+    var light = function (n) {
+      diagram.querySelectorAll('[data-stream]').forEach(function (el) {
+        el.classList.toggle('wd-on', n !== null && el.getAttribute('data-stream') === n);
+      });
+      diagram.classList.toggle('wd-focus', n !== null);
+    };
+    var streamOf = function (target) {
+      var el = target && target.closest ? target.closest('[data-stream]') : null;
+      return el && diagram.contains(el) ? el.getAttribute('data-stream') : null;
+    };
+    diagram.addEventListener('mouseover', function (e) {
+      var n = streamOf(e.target);
+      light(n !== null ? n : pinned);
+    });
+    diagram.addEventListener('mouseleave', function () { light(pinned); });
+    diagram.addEventListener('click', function (e) {
+      var n = streamOf(e.target);
+      pinned = n === pinned ? null : n;
+      light(pinned);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { pinned = null; light(null); }
+    });
+  }
+  // The toggle changes only a class on the container.
   button.addEventListener('click', function () {
     var fit = box.classList.toggle('fit');
     button.setAttribute('aria-pressed', fit ? 'true' : 'false');

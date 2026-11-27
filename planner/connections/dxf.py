@@ -34,6 +34,13 @@ else how sure it is --
 key badges; -Title the title block and legend; -Table the Connections table
 and Warnings.
 
+On a tab drawn as trunks (Dante, AVB) each trunk is LINEs, every piece
+once, CONTINUOUS and in the trunk's colour (``layout.STREAM_COLOURS``), on
+the layer of its links; its name is in a badge at its top and on every tap:
+a filled outline (a HATCH) with the name in white where the link is
+confirmed, the outline alone where it is inferred. Its port names and labels
+are in its colour too.
+
 Every entity carries its own colour and linetype (CONTINUOUS / DASHED / DOT,
 the screen's styles), never BYLAYER: a speaker run still shows whether it is
 confirmed, and a single-class drawing looks the same as a split one.
@@ -96,6 +103,9 @@ LEGEND = (
     ('? Not linked or ambiguous', ('unlinked',)),
     ('AVB / Dante network (no cable)', ('network',)),
 )
+TRUNK_LEGEND = 'One colour and name per stream'
+TAP_LEGEND = ('Confirmed', 'Inferred from labels')     # a filled badge, a hollow one
+WHITE = 0xFFFFFF
 UNSET_LEGEND = ('Console connection not set', ('unset',))
 B_LEGEND = ('B input (lighter; labelled "(B)")', ('b',))
 EMPTY_PROJECT = ('Nothing to draw yet. Add consoles, I/O devices, processors, amps or PA cable '
@@ -200,6 +210,7 @@ class _Drawing:
         from ezdxf.enums import TextEntityAlignment
         self.left = TextEntityAlignment.LEFT
         self.right = TextEntityAlignment.RIGHT
+        self.center = TextEntityAlignment.CENTER
         self.arrows = arrows
         self.doc = ezdxf.new(DXF_VERSION, setup=False)
         self.doc.units = 1          # $INSUNITS: inches
@@ -246,7 +257,8 @@ class _Drawing:
         """One line at baseline ``y``; ``size`` is the screen's font size.
         ``fit``: the widest it may be, in layout units; a longer line is
         squeezed (TEXT width factor), never under MIN_WIDTH. ``anchor``
-        'end': the line ends at ``x`` (right-aligned)."""
+        'end': the line ends at ``x`` (right-aligned); 'middle': it is
+        centred on ``x``."""
         value = clean(text, self.arrows)
         if not value:
             return None
@@ -260,6 +272,9 @@ class _Drawing:
         if anchor == 'end':
             entity.set_placement(self.pt(x, y), align=self.right)
             x -= width
+        elif anchor == 'middle':
+            entity.set_placement(self.pt(x, y), align=self.center)
+            x -= width / 2
         else:
             entity.set_placement(self.pt(x, y), align=self.left)
         self._seen(x, y - size)
@@ -286,6 +301,26 @@ class _Drawing:
     def arrowhead(self, x, y, layer, colour=None):
         return self.msp.add_solid([self.pt(x, y), self.pt(x - 6, y - 3.5), self.pt(x - 6, y + 3.5)],
                                   dxfattribs=self.attribs(layer, colour=colour))
+
+    def badge(self, box, x, y, text, layer, colour, filled, size=9):
+        """A stream's name in its badge (a circle, or a pill for a longer
+        name), all in ``colour``: filled with the name in white, or hollow
+        (an inferred tap)."""
+        x0, y0, x1, y1 = box
+        r = (y1 - y0) / 2
+        self._seen(x0, y0)
+        self._seen(x1, y1)
+        # Anticlockwise as drawn (y up): along the bottom, round the right
+        # end, back along the top, round the left end.
+        outline = [(*self.pt(x0 + r, y1), 0), (*self.pt(x1 - r, y1), 1),
+                   (*self.pt(x1 - r, y0), 0), (*self.pt(x0 + r, y0), 1)]
+        attribs = self.attribs(layer, colour=colour)
+        if filled:
+            hatch = self.msp.add_hatch(dxfattribs=attribs)
+            hatch.paths.add_polyline_path(outline, is_closed=True)
+        self.msp.add_lwpolyline(outline, format='xyb', close=True, dxfattribs=attribs)
+        self.text(x, y + size * 0.36, text, size, layer, bold=True,
+                  colour=WHITE if filled else colour, anchor='middle')
 
     def data(self):
         pad = 20
@@ -318,6 +353,22 @@ def _title_block(d, project_name, view, digest, printed, width):
     if view.get('show_unset_legend'):
         entries.append(UNSET_LEGEND)
     x, ly = 0, y + 106
+    trunks = view['layout'].trunks
+    if trunks:
+        # A tab drawn as trunks: every line is solid, so the legend shows a
+        # stream and the two badges.
+        first = trunks[0]
+        colour = stream_colour(first)
+        d.line(x, ly - 4, x + 34, ly - 4, TITLE, colour=colour)
+        d.text(x + 40, ly, TRUNK_LEGEND, 11, TITLE)
+        x += 40 + string_width(TRUNK_LEGEND, REGULAR, 11) + 22
+        for label, filled in zip(TAP_LEGEND, (True, False)):
+            half = (L.Badge(0, 0, first.label, True).box[2])
+            d.badge((x, ly - 4 - L.BADGE_R, x + 2 * half, ly - 4 + L.BADGE_R), x + half, ly - 4,
+                    first.label, TITLE, colour, filled)
+            d.text(x + 2 * half + 6, ly, label, 11, TITLE)
+            x += 2 * half + 6 + string_width(label, REGULAR, 11) + 22
+        entries = [LEGEND[2]] + ([B_LEGEND] if view.get('show_b_legend') else [])
     for label, classes in entries:
         layer = edge_layer(None, classes or ('confirmed',), None)
         colour = ROLE_COLOUR[layer]
@@ -344,29 +395,54 @@ def _columns(d, lay):
         d.line(group.x, last, group.x + L.BOX_W, last, BOXES)
 
 
-def _box(d, box):
+def stream_colour(trunk):
+    return int(L.STREAM_COLOURS[trunk.colour][1:], 16)
+
+
+def _trunk(d, tab, trunk, routes, edges):
+    """A trunk's pieces, each once, on the layer of its links, in its colour."""
+    mine = [routes[e] for e in trunk.edges]
+    layers = {}         # faded (a B link's own stretch) or not -> its layer
+    for route in mine:
+        layers.setdefault('b' in route.classes, edge_layer(tab, route.classes, edges.get(route.id)))
+    colour = stream_colour(trunk)
+    for x0, y0, x1, y1, faded in trunk.lines:
+        d.line(x0, y0, x1, y1, layers[faded if faded in layers else not faded],
+               colour=_fade(colour) if faded else colour)
+    for badge in trunk.badges:
+        d.badge(badge.box, badge.x, badge.y, badge.text, TEXT, colour, badge.filled)
+
+
+def _box(d, box, trunks=None):
     d.rect(box.x, box.y, box.x + box.w, box.y + box.h, BOXES,
            DASHED if box.style == 'unlinked' else CONTINUOUS)
     for cls, line, dy in box.text_rows:
         d.text(box.x + 8, box.y + dy, line, 12 if cls == 't' else 11, bold=cls == 't', fit=L.TEXT_W)
-    for anchor, x, y, lines, _ in box.port_texts():
+    for (anchor, x, y, lines, _), n in zip(box.port_texts(), box.port_streams()):
+        trunk = (trunks or {}).get(n)
         for j, line in enumerate(lines):
-            d.text(x, y + j * L.SLOT_LH, line, 10, fit=L.TEXT_W, anchor=anchor)
+            d.text(x, y + j * L.SLOT_LH, line, 10, fit=L.TEXT_W, anchor=anchor,
+                   colour=stream_colour(trunk) if trunk else None)
 
 
-def _route(d, tab, route, edge):
+def _route(d, tab, route, edge, trunk=None):
     layer = edge_layer(tab, route.classes, edge)
     colour = _fade(ROLE_COLOUR[layer]) if 'b' in route.classes else None
-    d.polyline(route.points, layer, edge_linetype(route.classes), colour=colour)
+    text = None
+    if trunk is None:
+        d.polyline(route.points, layer, edge_linetype(route.classes), colour=colour)
+    else:           # a trunk's branch: the line is the trunk's (``_trunk``)
+        text = stream_colour(trunk)
+        colour = _fade(text) if 'b' in route.classes else text
     d.arrowhead(*route.points[-1], layer, colour=colour)
-    if route.key:
+    if route.badge:
         x0, y0, x1, y1 = route.badge
         d.rect(x0, y0, x1, y1, TEXT)
         d.text(x0 + L.KEY_PAD, route.label_y, f'[{route.key}]', 11, bold=True)
         return
     n = len(route.lines)
     for i, line in enumerate(route.lines):
-        d.text(route.label_x, route.label_y - (n - 1 - i) * L.LABEL_LH, line, 11)
+        d.text(route.label_x, route.label_y - (n - 1 - i) * L.LABEL_LH, line, 11, colour=text)
 
 
 def _cell_lines(text, width):
@@ -444,10 +520,14 @@ def build_tab_dxf(*, project_name, view, digest, printed, arrows='', empty=False
         return d.data()
     edges = {e['id']: e for e in view['graph']['edges']}
     _columns(d, lay)
+    trunks = {t.n: t for t in lay.trunks}
     for route in lay.routes:
-        _route(d, view['tab'], route, edges.get(route.id))
+        _route(d, view['tab'], route, edges.get(route.id), trunks.get(route.trunk))
+    routes = {r.id: r for r in lay.routes}
+    for trunk in lay.trunks:
+        _trunk(d, view['tab'], trunk, routes, edges)
     for box in lay.boxes:
-        _box(d, box)
+        _box(d, box, trunks)
     y = _table(d, view, lay.height + TABLE_GAP)
     _warnings(d, view, y)
     return d.data()

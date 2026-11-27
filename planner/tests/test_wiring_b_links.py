@@ -134,7 +134,9 @@ class BEdgeTests(BShow, TestCase):
             b_routes = [r for r in lay.routes if 'b' in r.classes]
             self.assertTrue(b_routes, tab)
             root = ET.fromstring(svg.render(lay, title='t'))
-            classes = [p.get('class', '').split() for p in root.iter(f'{SVG_NS}path')]
+            # a line of its own, or (Dante: trunks) the stretch of a trunk only B runs along
+            classes = [p.get('class', '').split() for tag in ('path', 'line')
+                       for p in root.iter(f'{SVG_NS}{tag}')]
             self.assertTrue(any(c[0] == 'wd-edge' and 'b' in c for c in classes if c), tab)
         self.assertIn('.wd-edge.b { stroke-opacity: .45; }', svg.STYLE)
 
@@ -207,9 +209,16 @@ class BEdgeTests(BShow, TestCase):
             b_routes = [route for route in view['layout'].routes if 'b' in route.classes]
             self.assertTrue(b_routes, tab)
             # Every line states its own colour; only a B link has the faded one.
-            faded = [e for e in msp.query('LWPOLYLINE')
-                     if not e.closed and e.dxf.true_color == dxf._fade(0x2b4c7e)]
-            self.assertEqual(len(faded), len(b_routes), tab)
+            if tab == T.DANTE:
+                # Drawn as trunks: the stretches only a B link runs along,
+                # in its trunk's colour, faded.
+                colours = {dxf._fade(int(c[1:], 16)) for c in L.STREAM_COLOURS}
+                faded = [e for e in msp.query('LINE') if e.dxf.get('true_color') in colours]
+                self.assertTrue(faded, tab)
+            else:
+                faded = [e for e in msp.query('LWPOLYLINE')
+                         if not e.closed and e.dxf.true_color == dxf._fade(0x2b4c7e)]
+                self.assertEqual(len(faded), len(b_routes), tab)
             names = dxf.layer_names()
             for line in faded:
                 self.assertIn(line.dxf.layer, [names[r] for r in (dxf.CONFIRMED, dxf.INFERRED, dxf.UNLINKED)], tab)

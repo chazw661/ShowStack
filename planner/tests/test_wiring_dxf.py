@@ -299,7 +299,9 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
         for params in ({}, {'network': '0'}, {'network': '1'}):
             doc = self.dxf('avb', **params)
-            self.assertTrue(lines_of(doc, (dxf.NETWORK,)))
+            # a trunk: LINEs, each stretch once, on the Network layer
+            self.assertTrue([e for e in doc.modelspace().query('LINE') if role(e) == dxf.NETWORK])
+            self.assertFalse(lines_of(doc, (dxf.NETWORK,)))
             text = ' '.join(texts(doc, dxf.TEXT))
             for word in ('AVB Out 2', 'AVB ← SL P1 stream 2 (Delay)', 'No IP'):
                 self.assertIn(word, text)
