@@ -317,7 +317,7 @@ class CommsPageTests(CommsShow, TestCase):
         heads = [p.extract_text().split('\n')[1].split(' ')[0]
                  for p in PdfReader(io.BytesIO(everything.content)).pages
                  if p.extract_text().startswith(self.project.name)]
-        self.assertEqual(heads, ['Overview', 'Dante', 'Analogue/AES', 'Speaker', 'Comms'])
+        self.assertEqual(heads, ['Overview', 'Dante', 'AVB', 'Analogue/AES', 'Speaker', 'Comms'])
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
