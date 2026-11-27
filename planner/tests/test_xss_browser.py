@@ -455,6 +455,40 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'amp / destination box')
         self.assert_text(page, 'svg.wd-svg .wd-group', QUOTED, 'amp rack header')
 
+    def test_names_on_the_avb_tab(self):
+        # PR: AVB tab. Hostile processor, amp, rack, stream label and typed
+        # stream text, with the IP lines the view adds to the boxes.
+        from planner.models import (Amp, AmpChannel, AmpLocation, Location, P1Output,
+                                    P1Processor, SystemProcessor)
+        proc = SystemProcessor.objects.create(
+            project=self.project, name=QUOTED, device_type='P1', ip_address='10.0.2.1',
+            location=Location.objects.create(project=self.project, name=NAME))
+        P1Processor.objects.create(system_processor=proc)
+        P1Output.objects.filter(p1_processor__system_processor=proc, output_type='AVB',
+                                channel_number=1).update(label=NAME)
+        amp = Amp.objects.create(project=self.project, name=NAME, location=AmpLocation.objects.create(
+            project=self.project, name=QUOTED))
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=1,
+                                            defaults={'avb_stream': f'AVB 1 - {NAME}'})
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=2,
+                                            defaults={'avb_stream': QUOTED})
+
+        page = self.open(reverse('planner:wiring_diagram') + '?view=avb')
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, '.wd-tabs a[aria-current="page"]', 'AVB', 'tab bar')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', QUOTED, 'processor box')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'amp box')
+        self.assert_text(page, 'svg.wd-svg .wd-group', QUOTED, 'amp rack header')
+        self.assert_text(page, 'svg.wd-svg .wd-box text.ln', 'IP 10.0.2.1', 'IP line')
+        self.assert_text(page, 'svg.wd-svg .wd-box text.ln', 'No IP', 'amp with no IP')
+        self.assert_text(page, 'svg.wd-svg text.p[data-side="out"]', 'AVB Out 1', 'processor port')
+        slots = ' '.join(page.evaluate(
+            "[...document.querySelectorAll('svg.wd-svg .wd-box')].map(g => g.textContent)"))
+        slots = ' '.join(slots.split())
+        self.assertIn(NAME, slots)                  # the stream's label, in the amp's slot
+        self.assertIn('not linked', slots)          # the typed text that names no output
+        self.assertEqual(0, page.evaluate("document.querySelectorAll('svg.wd-svg img, svg.wd-svg i').length"))
+
     def test_names_in_wrapped_titles_kept_slots_and_the_connections_table(self):
         # PR 3.3: a long hostile name wraps over several title lines; a label
         # too long to draw is a key whose row in the Connections table names
@@ -615,7 +649,8 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assertTrue(download.suggested_filename.endswith('.zip'))
         with open(download.path(), 'rb') as f:
             archive = zipfile.ZipFile(io.BytesIO(f.read()))
-        self.assertEqual(len(archive.namelist()), 4)
+        self.assertEqual(len(archive.namelist()), 5)         # every tab but Dante, AVB among them
+        self.assertTrue(any(' - AVB - ' in name for name in archive.namelist()))
         for name in archive.namelist():
             self.assertNotIn('/', name)
             doc = ezdxf.read(io.StringIO(archive.read(name).decode('utf-8')))

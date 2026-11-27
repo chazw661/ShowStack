@@ -10,6 +10,14 @@ draw each as its own section.
              Console connection is Dante, or it has a Dante network set, or
              it is a comm device) and the Dante console links. Boxes carry
              the IP Address Manager's primary / secondary IP (``lines``).
+  avb        the AVB / Milan streams: every processor AVB output's feed to
+             an amp, and the amps' AVB stream text that names no output (the
+             "?" feeds). ``avb_boxes`` then boxes every processor that has an
+             AVB output, patched or not, and gives processors and amps their
+             IP line; it is called by ``views_wiring`` with what
+             ``views_wiring.avb_devices`` read, never from the project graph.
+             No headers per network (AVB has no network name; amps keep their
+             rack headers) and no banner (there is no setting to make).
   analog     analog and AES feeds (I/O or console -> processor -> amp, I/O
              -> amp, their unlinked feeds and "?" matches) and every console
              link that is not Dante. A console link whose device has no
@@ -47,10 +55,12 @@ box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
 plugs in where.
 """
 
-OVERVIEW, DANTE, ANALOG, SPEAKERS, COMMS = 'overview', 'dante', 'analog', 'speakers', 'comms'
+OVERVIEW, DANTE, AVB, ANALOG, SPEAKERS, COMMS = (
+    'overview', 'dante', 'avb', 'analog', 'speakers', 'comms')
 TABS = (
     (OVERVIEW, 'Overview'),
     (DANTE, 'Dante'),
+    (AVB, 'AVB'),
     (ANALOG, 'Analogue/AES'),
     (SPEAKERS, 'Speaker cables'),
     (COMMS, 'Comms'),
@@ -122,6 +132,10 @@ def _keep_dante(edge, nodes):
     return is_console_link(edge) and _device_end(edge, nodes).get('console_connection') == 'dante'
 
 
+def _keep_avb(edge, nodes):
+    return 'avb' in edge.get('transports', ()) and not edge.get('comm')
+
+
 def _keep_analog(edge, nodes):
     transports = set(edge.get('transports', ()))
     if is_console_link(edge):
@@ -138,7 +152,7 @@ def _keep_speakers(edge, nodes):
     return 'speaker' in edge.get('transports', ())
 
 
-KEEP = {DANTE: _keep_dante, ANALOG: _keep_analog, SPEAKERS: _keep_speakers}
+KEEP = {DANTE: _keep_dante, AVB: _keep_avb, ANALOG: _keep_analog, SPEAKERS: _keep_speakers}
 
 
 def _ip_line(node):
@@ -213,6 +227,29 @@ def comms_notes(graph, full):
         if node['kind'] == 'device' and n and node['id'] not in others:
             node = {**node, 'comms_note': COMMS_NOTE.format(
                 n=n, patches='comms patch' if n == 1 else 'comms patches')}
+        nodes.append(node)
+    return {**graph, 'nodes': nodes}
+
+
+def avb_boxes(graph, full, devices):
+    """The AVB tab's ``graph`` with every processor that has an AVB output
+    boxed, an amp on it or not, and an IP line on each processor and amp.
+    ``devices``: {'processors': node ids with an AVB output, 'ips': {node id:
+    IP}} (``views_wiring.avb_devices``). Nodes stay in ``full``'s order."""
+    shown = {n['id']: n for n in graph['nodes']}
+    ips = devices.get('ips', {})
+    nodes = []
+    for node in full['nodes']:
+        boxed = node['kind'] == 'processor' and node['id'] in devices.get('processors', ())
+        if node['id'] not in shown and not boxed:
+            continue
+        node = dict(shown.get(node['id'], node))
+        if node['id'] not in shown:
+            # Its slots name feeds this tab does not draw.
+            node.pop('slots', None)
+            node.pop('out_slots', None)
+        if node['kind'] in ('processor', 'amp'):
+            node['lines'] = [f"IP {ips[node['id']]}" if ips.get(node['id']) else 'No IP']
         nodes.append(node)
     return {**graph, 'nodes': nodes}
 

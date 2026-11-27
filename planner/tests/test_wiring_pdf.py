@@ -231,8 +231,8 @@ class WiringPdfTests(WiringShow, TestCase):
         reader, pages = self.pdf()
         stamp_digest = f'Graph {digest(project_graph(self.project))}'
         starts = [i for i, text in enumerate(pages) if text.startswith(self.project.name)]
-        self.assertEqual(len(starts), 5)
-        for i, label in zip(starts, ('Overview', 'Dante', 'Analogue/AES', 'Speaker cables',
+        self.assertEqual(len(starts), 6)
+        for i, label in zip(starts, ('Overview', 'Dante', 'AVB', 'Analogue/AES', 'Speaker cables',
                                      'Comms')):
             head = pages[i].split('\n')[1]
             self.assertTrue(head.startswith(label), head)
@@ -252,7 +252,7 @@ class WiringPdfTests(WiringShow, TestCase):
         self.assertEqual(len(heads), 1)
         self.assertTrue(heads[0].startswith('Analogue/AES'))
         _, pages = self.pdf(tabs='nonsense')                # nothing known: every tab
-        self.assertEqual(sum(t.startswith(self.project.name) for t in pages), 5)
+        self.assertEqual(sum(t.startswith(self.project.name) for t in pages), 6)
 
     def test_paper_sizes(self):
         for paper, size in (('11x17', (1224, 792)), ('24x36', (2592, 1728)), ('A4', (1224, 792))):
@@ -282,6 +282,16 @@ class WiringPdfTests(WiringShow, TestCase):
             _, off = self.pdf(tabs='overview', **params)
             self.assertNotIn('SL Amp AVB Ch 2', off[0])
         self.assertIn('AVB ← SL P1 stream 2 (Delay)', re.sub(r'\s+', ' ', off[0]))
+
+    def test_the_avb_tab_prints_its_streams_whatever_the_network_box_says(self):
+        self.p1_out(self.sl, 'AVB', 2, 'Delay')
+        self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
+        for params in ({}, {'network': '0'}, {'network': '1'}):
+            _, pages = self.pdf(tabs='avb', **params)
+            text = re.sub(r'\s+', ' ', pages[0])
+            self.assertTrue(pages[0].split('\n')[1].startswith('AVB'))
+            for word in ('AVB Out 2', 'SL Amp AVB Ch 2', 'AVB ← SL P1 stream 2 (Delay)', 'No IP'):
+                self.assertIn(word, text)
 
     def test_keys_and_the_connections_table(self):
         view = tab_view(self.project, project_graph(self.project), T.OVERVIEW)
@@ -337,7 +347,7 @@ class WiringPdfTests(WiringShow, TestCase):
     def test_an_empty_project_still_prints_its_title_blocks(self):
         self.project = self.make_project('Empty show')
         _, pages = self.pdf()
-        self.assertEqual(sum(t.startswith('Empty show') for t in pages), 5)
+        self.assertEqual(sum(t.startswith('Empty show') for t in pages), 6)
         self.assertIn('Nothing to draw yet', pages[0])
 
     def test_any_project_role_can_download_and_only_their_project(self):

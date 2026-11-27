@@ -16,8 +16,9 @@ from planner.connections import layout as L
 from planner.connections import svg
 from planner.connections import tabs as T
 from planner.connections.graph import project_graph
-from planner.models import (ConsoleAuxOutput, Device, PAFanOut, PAFanOutExtension, Project,
-                            ProjectMember)
+from planner.models import (Amp, ConsoleAuxOutput, Device, PAFanOut, PAFanOutExtension, Project,
+                            P1Output,
+                            ProjectMember, SystemProcessor)
 from planner.tests.connection_fixtures import ConnectionFixtures
 from planner.tests.test_device_patch_link import PatchLinkBase, page_form_data
 from planner.tests.test_wiring_view import svg_of
@@ -175,6 +176,111 @@ class DanteTabTests(TabShow, TestCase):
         # MADI and Plain Box are not here; Dante Box uses both sides.
         self.assertIn(f"{self.id['dante']}#in", self.boxes)
         self.assertIn(f"{self.id['dante']}#out", self.boxes)
+
+
+class AvbTabTests(TabShow, TestCase):
+    """The AVB tab: processor AVB outputs and the amps they feed, parallel
+    to the Dante tab."""
+
+    def setUp(self):
+        super().setUp()
+        self.id = self.ids()
+        # a second processor with an AVB output and no amp on it yet, one
+        # with none, an amp with no AVB feed, and AVB text naming no output
+        self.spare_p1 = self.p1('Spare P1')
+        self.p1_out(self.spare_p1, 'AVB', 1, 'Delay')
+        self.aes_only = self.p1('AES P1')
+        self.p1_out(self.aes_only, 'AES', 1, 'Lobby')
+        P1Output.objects.filter(p1_processor__system_processor=self.aes_only,
+                                output_type='AVB').delete()     # a P1 is made with eight
+        self.dry = self.amp('Dry Amp')
+        self.lost = self.amp('Lost Amp')
+        self.amp_channel(self.lost, 1, avb_stream='Nowhere')
+
+    def avb(self):
+        from planner import views_wiring as V
+        self.full = project_graph(self.project)
+        self.graph, self.lay, _ = V.tab_layout(self.full, T.AVB, avb=V.avb_devices(self.project))
+        self.boxes = {b.id: b for b in self.lay.boxes}
+        return self.graph
+
+    def test_only_avb_edges(self):
+        self.avb()
+        self.assertEqual(len(self.graph['edges']), 2)
+        for edge in self.graph['edges']:
+            self.assertEqual(edge['transports'], ['avb'])
+            self.assertTrue(edge['network'])
+        linked, unlinked = sorted(self.graph['edges'], key=lambda e: e['unlinked'])
+        self.assertEqual((linked['from'], linked['to']), (self.id['sl'], self.id['amp']))
+        self.assertEqual(unlinked['to'], f'amp:{self.lost.pk}')
+
+    def test_processors_with_an_avb_output_are_boxed_patched_or_not(self):
+        self.avb()
+        processors = {n['id'] for n in self.graph['nodes'] if n['kind'] == 'processor'}
+        self.assertEqual(processors, {self.id['sl'], f'processor:{self.spare_p1.pk}'})
+        self.assertIn(f'processor:{self.spare_p1.pk}', self.boxes)
+
+    def test_amps_are_boxed_only_with_an_avb_feed(self):
+        self.avb()
+        amps = {n['id'] for n in self.graph['nodes'] if n['kind'] == 'amp'}
+        self.assertEqual(amps, {self.id['amp'], f'amp:{self.lost.pk}'})
+
+    def test_no_console_device_or_speaker_is_here(self):
+        self.avb()
+        self.assertFalse({n['kind'] for n in self.graph['nodes']}
+                         & {'console', 'device', 'speaker_array', 'amp_location'})
+        self.assertEqual(self.titles(), ['Processors', 'Unlinked feeds', 'Amps'])
+
+    def test_port_labels_follow_the_line(self):
+        self.avb()
+        # the processor names its output where the line leaves, on the right
+        self.assertEqual(self.boxes[self.id['sl']].out_text, [['AVB Out 1']])
+        # the amp names its input and what feeds it, on the left
+        self.assertEqual(self.boxes[self.id['amp']].slots,
+                         ['AVB ← SL P1 stream 1 (Main L) · Ch 1'])
+        [route] = [r for r in self.lay.routes if r.to_node == self.id['amp']]
+        self.assertEqual(route.label, 'SL Amp AVB Ch 1')
+
+    def test_a_box_keeps_only_the_slots_of_lines_drawn_here(self):
+        # SL P1's AES input and AES output, the amp's AES input: other tabs'.
+        self.avb()
+        self.assertEqual(self.boxes[self.id['sl']].slots, [])
+        self.assertNotIn('AES', ' '.join(self.boxes[self.id['amp']].slots))
+        spare = self.boxes[f'processor:{self.spare_p1.pk}']
+        self.assertEqual((spare.slots, spare.out_text), ([], []))
+
+    def test_boxes_show_their_ip(self):
+        SystemProcessor.objects.filter(pk=self.sl.pk).update(ip_address='10.0.2.1')
+        Amp.objects.filter(pk=self.amp_.pk).update(ip_address='10.0.2.50')
+        self.avb()
+        self.assertEqual(self.boxes[self.id['sl']].lines, ['IP 10.0.2.1'])
+        self.assertEqual(self.boxes[self.id['amp']].lines, ['IP 10.0.2.50'])
+        self.assertEqual(self.boxes[f'amp:{self.lost.pk}'].lines, ['No IP'])
+        texts = [t.text for t in ET.fromstring(svg.render(self.lay)).iter(f'{SVG_NS}text')]
+        self.assertIn('IP 10.0.2.1', texts)
+
+    def test_the_project_graph_and_its_digest_hold_no_ip(self):
+        from planner.connections.graph import digest
+        before = digest(project_graph(self.project))
+        SystemProcessor.objects.filter(pk=self.sl.pk).update(ip_address='10.0.2.1')
+        Amp.objects.filter(pk=self.amp_.pk).update(ip_address='10.0.2.50')
+        self.assertEqual(digest(project_graph(self.project)), before)
+
+    def test_nothing_overlaps_and_every_line_ends_on_its_row(self):
+        SystemProcessor.objects.filter(pk=self.sl.pk).update(ip_address='10.0.2.1')
+        self.avb()
+        for box in self.lay.boxes:
+            rows = [box.y + y for _, _, y in box.text_rows]
+            for _, _, y, lines, _ in box.port_texts():
+                self.assertGreater(y, max(rows), box.id)       # port names below the IP line
+                self.assertLessEqual(y + L.SLOT_LH * (len(lines) - 1), box.y + box.h, box.id)
+
+    def test_the_other_tabs_are_as_before(self):
+        self.tab(T.ANALOG)
+        for edge in self.graph['edges']:
+            self.assertNotIn('avb', edge['transports'])
+        self.tab(T.DANTE)
+        self.assertFalse({n['kind'] for n in self.graph['nodes']} & {'processor', 'amp'})
 
 
 class AnalogTabTests(TabShow, TestCase):
@@ -354,6 +460,34 @@ class WiringTabViewTests(TabShow, TestCase):
         response = self.client.get(self.url, {'view': T.SPEAKERS})
         self.assertContains(response, 'No PA cable runs yet')
         self.assertIsNone(svg_of(response))
+
+    def test_the_avb_tab_draws_streams_ips_and_connections(self):
+        SystemProcessor.objects.filter(pk=self.sl.pk).update(ip_address='10.0.2.1')
+        response = self.get(T.AVB)
+        root = ET.fromstring(svg_of(response))
+        texts = {t.text for t in root.iter(f'{SVG_NS}text')}
+        self.assertIn('IP 10.0.2.1', texts)
+        self.assertIn('AVB Out 1', texts)
+        self.assertIn('SL Amp AVB Ch 1', texts)             # drawn on its line: no key needed
+        self.assertEqual(response.context['connections'], [])
+        self.assertEqual(response.context['unset'], [])
+        self.assertNotContains(response, 'no Console connection set')
+        self.assertFalse(response.context['network_toggle'])
+
+    def test_the_avb_tab_with_nothing_says_why(self):
+        from planner.models import AmpChannel
+        P1Output.objects.filter(output_type='AVB').delete()
+        AmpChannel.objects.update(avb_stream='')
+        response = self.get(T.AVB)
+        self.assertContains(response, 'No AVB stream yet')
+        self.assertIsNone(svg_of(response))
+
+    def test_names_are_escaped_on_the_avb_tab(self):
+        SystemProcessor.objects.filter(pk=self.sl.pk).update(name=NAME)
+        Amp.objects.filter(pk=self.amp_.pk).update(name=NAME)
+        body = self.get(T.AVB).content.decode()
+        self.assertNotIn('<img src=x', body)
+        self.assertIn('&lt;img src=x onerror=alert(1)&gt;', body)
 
     def test_names_and_ips_are_escaped_on_the_dante_tab(self):
         Device.objects.filter(pk=self.dante.pk).update(name=NAME)

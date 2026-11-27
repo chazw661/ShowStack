@@ -23,12 +23,12 @@ from planner.tests.test_comm_devices import PLAIN_STATIC
 from planner.tests.test_comms_tab import CommsShow
 from planner.tests.test_wiring_layout import WiringShow
 from planner.utils.pdf_exports import wiring_pdf
-from planner.views_wiring import (MANY_PAGES, download_hints, file_part, suggestion_text,
+from planner.views_wiring import (MANY_PAGES, avb_devices, download_hints, file_part, suggestion_text,
                                   tab_view)
 
 NAME = '<img src=x onerror=alert(1)>'
 QUOTED = '"\'><b>&amp; ]]> Łódź'
-TAB_FILES = ('Overview', 'Dante', 'Analogue-AES', 'Speaker cables', 'Comms')
+TAB_FILES = ('Overview', 'Dante', 'AVB', 'Analogue-AES', 'Speaker cables', 'Comms')
 SPLIT_LAYERS = {'Audio-Wiring-' + word for word in (
     'Boxes', 'Text', 'Confirmed', 'Inferred', 'Unlinked', 'Network', 'Speaker', 'Comms',
     'Table', 'Title')}
@@ -294,8 +294,18 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
             # the amp's slot still names what feeds it
             self.assertIn('AVB ← SL P1 stream 2 (Delay)', ' '.join(texts(off, dxf.TEXT)))
 
+    def test_the_avb_tab_draws_its_streams_as_network_lines(self):
+        self.p1_out(self.sl, 'AVB', 2, 'Delay')
+        self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
+        for params in ({}, {'network': '0'}, {'network': '1'}):
+            doc = self.dxf('avb', **params)
+            self.assertTrue(lines_of(doc, (dxf.NETWORK,)))
+            text = ' '.join(texts(doc, dxf.TEXT))
+            for word in ('AVB Out 2', 'AVB ← SL P1 stream 2 (Delay)', 'No IP'):
+                self.assertIn(word, text)
+
     def test_the_diagrams_text_is_the_layouts_text(self):
-        for tab in (T.OVERVIEW, T.DANTE, T.ANALOG, T.SPEAKERS):
+        for tab in (T.OVERVIEW, T.DANTE, T.AVB, T.ANALOG, T.SPEAKERS):
             view = self.tab(tab, network=True)
             lay = view['layout']
             want = []
@@ -433,7 +443,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.project.save()
         response = self.get()                           # every tab; each must audit clean
         archive = zipfile.ZipFile(io.BytesIO(response.content))
-        self.assertEqual(len(archive.namelist()), 5)
+        self.assertEqual(len(archive.namelist()), 6)
         for name in archive.namelist():
             self.assertNotIn('/', name)
             self.assertNotIn('\\', name)
@@ -463,7 +473,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.assertEqual(len(doc.modelspace().query('SOLID')), 0)
         self.project = self.make_project('Empty show')
         archive = zipfile.ZipFile(io.BytesIO(self.get().content))
-        self.assertEqual(len(archive.namelist()), 5)
+        self.assertEqual(len(archive.namelist()), 6)
         for name in archive.namelist():
             self.assertIn(dxf.EMPTY_PROJECT, texts(read(archive.read(name)), dxf.TITLE), name)
 
@@ -743,9 +753,9 @@ class DownloadPanelTests(DxfMixin, WiringShow, TestCase):
         self.assertNotIn('wd-edge inferred network', self.page(network='0'))
 
     def test_each_tab_shows_its_diagram_pages_from_the_tiling_plan(self):
-        hints = download_hints(project_graph(self.project))
+        hints = download_hints(project_graph(self.project), avb_devices(self.project))
         page = self.page()
-        for tab in (T.OVERVIEW, T.DANTE, T.ANALOG, T.SPEAKERS):
+        for tab in (T.OVERVIEW, T.DANTE, T.AVB, T.ANALOG, T.SPEAKERS):
             counts = dict(hints['tabs'][tab]['counts'])
             self.assertEqual(sorted(counts), ['11x17-0', '11x17-1', '24x36-0', '24x36-1'])
             for network in (0, 1):

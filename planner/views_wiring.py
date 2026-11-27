@@ -166,6 +166,8 @@ def connection_rows(graph, lay, full=None):
 TAB_EMPTY = {
     T.DANTE: 'No console or Dante I/O device yet. Set Console connection to Dante on an '
              'I/O device page.',
+    T.AVB: 'No AVB stream yet. Add AVB outputs on a processor page, then pick them in the '
+           'amps\' AVB Stream fields.',
     T.ANALOG: 'No analogue or AES feed and no non-Dante console link yet.',
     T.SPEAKERS: 'No PA cable runs yet. Add them on the PA Cable Schedule.',
     T.COMMS: 'No comm device yet. Add one on the Devices page ("Add comm device").',
@@ -182,11 +184,35 @@ def unset_banner(graph, tab):
             for n in T.unset_devices(graph)]
 
 
-def tab_layout(full, tab, network=True):
-    """(graph, layout, network feeds hidden) of one tab: no queries."""
+def avb_devices(project):
+    """What the AVB tab reads that the project graph does not hold:
+    {'processors': the node ids of processors with an AVB output, 'ips':
+    {node id: IP} of every processor and amp that has one}."""
+    from planner.connections import endpoints as ep
+    from planner.models import Amp, GalaxyOutput, P1Output, SystemProcessor
+
+    processors = set()
+    for model, owner in ((P1Output, 'p1_processor'), (GalaxyOutput, 'galaxy_processor')):
+        pks = (model.objects.filter(**{f'{owner}__system_processor__project': project,
+                                       'output_type': 'AVB'})
+               .values_list(f'{owner}__system_processor_id', flat=True).distinct())
+        processors.update(ep.node_id(ep.PROCESSOR, pk) for pk in pks)
+    ips = {}
+    for model, kind in ((SystemProcessor, ep.PROCESSOR), (Amp, ep.AMP)):
+        for pk, ip in model.objects.filter(project=project).values_list('pk', 'ip_address'):
+            if ip:
+                ips[ep.node_id(kind, pk)] = ip
+    return {'processors': processors, 'ips': ips}
+
+
+def tab_layout(full, tab, network=True, avb=None):
+    """(graph, layout, network feeds hidden) of one tab: no queries.
+    ``avb``: ``avb_devices(project)``, for the AVB tab."""
     graph = T.graph_view(full, tab)
     if tab in (T.OVERVIEW, T.DANTE):
         graph = T.comms_notes(graph, full)
+    if tab == T.AVB:
+        graph = T.avb_boxes(graph, full, avb or {})
     hidden_network = 0
     if tab == T.OVERVIEW and not network:
         hidden_network = sum(bool(e.get('network')) for e in graph['edges'])
@@ -194,10 +220,13 @@ def tab_layout(full, tab, network=True):
     return graph, layout(graph, **T.layout_options(tab)), hidden_network
 
 
-def tab_view(project, full, tab, network=True):
+def tab_view(project, full, tab, network=True, avb=None):
     """One tab of the project's graph, laid out, with its tables: what the
-    page, the PDF and the DXF all draw."""
-    graph, lay, hidden_network = tab_layout(full, tab, network)
+    page, the PDF and the DXF all draw. ``avb``: ``avb_devices(project)``
+    when the caller already has it (read here otherwise, for the AVB tab)."""
+    if tab == T.AVB and avb is None:
+        avb = avb_devices(project)
+    graph, lay, hidden_network = tab_layout(full, tab, network, avb)
     edges = graph['edges']
     return {
         'tab': tab,
@@ -233,8 +262,9 @@ def wiring_diagram(request):
     tab = T.tab_or_default(request.GET.get('view'))
     full = project_graph(project)
     network = request.GET.get('network') != '0'
-    view = tab_view(project, full, tab, network)
-    hints = download_hints(full)
+    avb = avb_devices(project)
+    view = tab_view(project, full, tab, network, avb)
+    hints = download_hints(full, avb)
     dxf_prefix, dxf_mode = dxf_classes(request, project)
     context.update({
         'dxf_prefix': dxf_prefix,
@@ -285,7 +315,7 @@ def suggestion_text(labels_and_pages):
                     for label, n in labels_and_pages if n > MANY_PAGES)
 
 
-def download_hints(full):
+def download_hints(full, avb=None):
     """How many pages each tab's diagram takes in the PDF, per paper size
     (``tiling.plan``; the Connections table and Warnings come after, on
     pages of their own). {'tabs': {tab: {'text', 'counts'}}, 'suggestion'}:
@@ -301,7 +331,7 @@ def download_hints(full):
             if network and tab != T.OVERVIEW:       # only the Overview has the feeds
                 by_network[1] = by_network[0]
                 continue
-            graph, lay, _ = tab_layout(full, tab, bool(network))
+            graph, lay, _ = tab_layout(full, tab, bool(network), avb)
             drawn = bool(lay.boxes) and bool(graph['nodes'] or graph['edges'])
             by_network[network] = [diagram_pages(lay, paper) if drawn else 0 for paper, _ in PAPERS]
         counts = [(f'{paper}-{network}', by_network[network][i])
