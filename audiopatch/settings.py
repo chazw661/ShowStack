@@ -197,9 +197,26 @@ STATIC_URL = 'static/'
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_DIRS = [
-    BASE_DIR / "planner" / "static",
-]
+# No STATICFILES_DIRS. Every static file lives in an app's static/ folder
+# (planner/static, marketing/static) and the app finder collects it. Listing
+# planner/static here as well collected each of its files twice, and let a
+# stale planner/static/marketing/css/marketing.css shadow the real one in
+# marketing/static for ten months.
+#
+# Consequence: precedence is INSTALLED_APPS order alone, so a file in
+# planner/static/admin/ can NOT override one shipped by admin_interface or
+# django.contrib.admin (both are listed before planner). Give an override a
+# name of its own. planner.tests.test_static_files fails on any path two
+# places both provide.
+STATICFILES_DIRS = []
+
+# How Whitenoise tells a hashed file (cache forever) from a plain one. Its
+# default drops the second-to-last dotted part of every filename and asks the
+# storage for the result, so jquery.init.js became a lookup for jquery.js and
+# Sortable.min.js one for Sortable.js: six "static asset missing from manifest"
+# warnings on every boot for files no page asks for. Match the 12 hex digits
+# Django's manifest storage puts in a name instead.
+WHITENOISE_IMMUTABLE_FILE_TEST = r'^.+\.[0-9a-f]{12}\.[^.]+$'
 
 
 

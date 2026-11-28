@@ -195,6 +195,8 @@ Two template directories (both in `TEMPLATES['DIRS']`):
 - `templates/` — project-level: admin overrides, marketing, mobile, accounts
 - `planner/templates/` — app-level (via `APP_DIRS`)
 
+Marketing pages (login and register included) live in `templates/marketing/` only; the `marketing` app has no templates folder. Their CSS, JS and images live in `marketing/static/marketing/` only.
+
 ---
 
 ## Architecture
@@ -296,7 +298,9 @@ element.style.setProperty('color', 'red', 'important');
 ```
 
 ### `collectstatic`
-Runs in the service's start command on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure. `ForgivingManifestStaticFilesStorage` logs a warning naming any asset it could not find in the manifest, so grep the Railway logs for `static asset missing from manifest`.
+Runs in the service's start command on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure. `ForgivingManifestStaticFilesStorage` logs a warning naming any asset it could not find in the manifest, so grep the Railway logs for `static asset missing from manifest`. A healthy deploy logs none.
+
+**One copy of every static file.** `STATICFILES_DIRS` is empty: static files live in an app's `static/` folder (`planner/static`, `marketing/static`) and precedence is `INSTALLED_APPS` order, so a file under `planner/static/admin/` cannot override one from `admin_interface` or Django's admin; give it its own name. A healthy `collectstatic` logs exactly two "Found another file with the destination path" lines (`admin/js/cancel.js`, `admin/js/popup_response.js`: `admin_interface` overriding Django on purpose). Any other is a second copy, and the older one may be the one served (a stale `marketing.css` was, for ten months). `planner.tests.test_static_files` fails on a duplicate static path, a template name in two of our template folders, or a Whitenoise start that logs a missing asset (`WHITENOISE_IMMUTABLE_FILE_TEST` in settings is what keeps that quiet).
 
 ---
 
