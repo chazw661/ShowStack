@@ -11,6 +11,10 @@ hints), so a scale under MIN_SCALE would print it under 6pt; then the
 diagram is tiled instead: on as few pages as MIN_SCALE needs, at the largest
 scale that still needs no more (``SCALE_STEPS`` tried, largest first).
 
+``plan(..., vertical=True)`` (a stage of the Overview): never larger than
+fits the page's width, so a diagram that needs more than a page is cut
+downward only, one strip. Only one too wide even at MIN_SCALE gets strips.
+
 Tiles never cut through a box:
 
   across  strips are cut in the gaps between columns, just left of a
@@ -163,8 +167,11 @@ def _cut_inside(blocks, start, limit):
     return None, None
 
 
-def plan(lay, width, height, min_scale=MIN_SCALE, max_scale=MAX_SCALE):
-    """``width`` x ``height``: the points a page has for the diagram."""
+def plan(lay, width, height, min_scale=MIN_SCALE, max_scale=MAX_SCALE, vertical=False):
+    """``width`` x ``height``: the points a page has for the diagram.
+    ``vertical``: tiles go downward only (the scale never over the width's)."""
+    if vertical:
+        max_scale = max(min_scale, min(max_scale, width / lay.width))
     one = min(width / lay.width, height / lay.height, max_scale)
     if one >= min_scale - 1e-9:
         region = Region(0, 0.0, lay.width, 0.0, lay.height)

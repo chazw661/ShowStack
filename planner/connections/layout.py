@@ -115,6 +115,14 @@ sub-columns come out most even: between two groups when that is nearly as
 even (within WRAP_GROUP_SLACK), else inside one, whose later part is headed
 "PA LEFT (continued)". A line that passes a sub-column runs in a lane at its
 top, above the first header, LANE_GAP from the next lane.
+
+``layout(graph, wrap=True, page=(w, h), wrap_width=n)`` (a stage of the
+Overview's PDF, ``tabs.stage_views``): the page to fit is ``page``, and the
+sub-columns are added one at a time for as long as the tab is no wider than
+``wrap_width`` (the widest that still prints at the PDF's smallest scale);
+of those, the one that fits the page largest is kept (a further sub-column
+only when it gains WRAP_GAIN). ``first_key``: the first "[n]" key's number,
+so the stages' keys run on in one Connections table.
 """
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -493,7 +501,8 @@ class _Builder:
     titles = COLUMN_TITLES
 
     def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, trunks=None,
-                 split=None):
+                 split=None, first_key=1):
+        self.first_key = first_key
         self.split = split or {}        # column -> {box id: its sub-column, 0..}
         self.trunk_prefix = trunks      # None: a line per edge
         self.trunk_of = {}              # edge id -> (source box id, from_slot), its trunk
@@ -802,7 +811,9 @@ class _Builder:
         with no slot (a processor matched by name only) gets an unnamed one.
         A slot whose line is hidden (``kept``: network feeds off) stays."""
         used = {s.edge.get('to_slot') for s in box.ins}
-        rows = [slot for slot in named if slot['id'] in used or slot.get('kept')]
+        # An I/O device's slots are its outputs': none is kept on its inputs box.
+        keeps = not (box.kind == 'device' and box.id.endswith('#in'))
+        rows = [slot for slot in named if slot['id'] in used or (keeps and slot.get('kept'))]
         index = {slot['id']: i for i, slot in enumerate(rows)}
         box.slots = [slot['label'] for slot in rows]
         for seg in box.ins:
@@ -949,7 +960,7 @@ class _Builder:
     def fit_labels(self):
         """Each drawn edge's label lines, or its key when a line is wider
         than ``label_max`` or there are too many."""
-        n = 0
+        n = self.first_key - 1
         for edge, _, _ in self.edges:
             lines = self.label_lines(edge)
             if len(lines) > LABEL_LINES_MAX or any(text_width(x) > self.label_max for x in lines):
@@ -1158,34 +1169,45 @@ BUILDERS = {DEFAULT_SCHEME: _Builder, COMMS_SCHEME: _CommsBuilder}
 
 
 def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX, scheme=DEFAULT_SCHEME,
-           trunks=None, wrap=False):
+           trunks=None, wrap=False, page=WRAP_PAGE, wrap_width=None, first_key=1):
     """``hide_empty``: the columns left out when no box is in them (a tab
     passes ``ALL_COLUMNS``). ``label_max``: the widest a label line may be;
     a wider one makes the label a key. ``scheme``: which columns (the
     seven, or the Comms tab's three). ``trunks``: a prefix ("T") to draw the
     lines leaving one port as one trunk, named with it and a number.
     ``wrap``: wrap a tall column into sub-columns while the tab then fits an
-    11x17 page at a larger scale."""
+    11x17 page at a larger scale. ``page``: the page to fit instead, in
+    units at 100%. ``wrap_width``: wrap for as long as the tab is no wider
+    than this and keep the best fit of them. ``first_key``: the first key's
+    number."""
     def build(split):
-        return _build(BUILDERS[scheme](graph, hide_empty, label_max, trunks, split), trunks)
+        return _build(BUILDERS[scheme](graph, hide_empty, label_max, trunks, split, first_key),
+                      trunks)
     plain, lay = build({})
     b, split = plain, {}
+    best = lay
     for _ in range(WRAP_MAX if wrap else 0):
-        if _fit(lay) >= 1:
+        if _fit(lay, page) >= 1:
             break
         wider = _wider(plain, b, split)
         if wider is None:
             break
         b2, lay2 = build(wider)
-        if _fit(lay2) < _fit(lay) * WRAP_GAIN:
+        if wrap_width is None:
+            if _fit(lay2, page) < _fit(lay, page) * WRAP_GAIN:
+                break
+            best = lay2
+        elif lay2.width > wrap_width:
             break
+        elif _fit(lay2, page) >= _fit(best, page) * WRAP_GAIN:
+            best = lay2
         b, lay, split = b2, lay2, wider
-    return lay
+    return best
 
 
-def _fit(lay):
-    """The scale ``lay`` fits one 11x17 page at."""
-    return min(WRAP_PAGE[0] / lay.width, WRAP_PAGE[1] / lay.height)
+def _fit(lay, page=WRAP_PAGE):
+    """The scale ``lay`` fits one page at (an 11x17 one unless given)."""
+    return min(page[0] / lay.width, page[1] / lay.height)
 
 
 def _partition(heights, n):

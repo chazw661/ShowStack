@@ -19,6 +19,14 @@ it comes back. The Connections table follows (header row repeated on each
 page, no row split), then Warnings. A tab with no warnings says "Warnings:
 none" in its title block instead, so it has no page for them.
 
+An Overview that would be tiled is drawn by signal-flow stage instead
+(``overview_stages``; ``tabs.stage_views``): A Inputs → Console → Outputs,
+B Outputs → Processors → Amps, C Amps → Speakers, each laid out on its own
+with its tall column wrapped (``stage_layout``) and starting a page. A box
+on the boundary is on both pages and every line starts and ends on one, so
+there is no "→ p.N". A stage too tall even so is tiled downward only, and
+only there do the markers remain. An Overview that fits one page stays whole.
+
 The document is built twice: the first pass finds the page each tile lands
 on and the page count, the second draws the page numbers in.
 """
@@ -33,6 +41,7 @@ from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, PageBreak, Pag
                                 Paragraph, Spacer, Table, TableStyle)
 
 from planner.connections import layout as L
+from planner.connections import tabs as T
 from planner.connections import tiling
 from planner.utils.labels.fonts import BOLD, REGULAR, SEMIBOLD, normalise, register_fonts
 from planner.utils.pdf_exports.mic_plan_pdf import stamp
@@ -398,7 +407,8 @@ class DiagramPage(Flowable):
 
     def draw(self):
         c = self.canv
-        self.info['pages'][(self.view['tab'], self.tile.index)] = c.getPageNumber()
+        self.info['pages'][(self.view['tab'], self.view.get('stage'), self.tile.index)] = (
+            c.getPageNumber())
         top = self.height
         draw_text(c, 0, top - 14, self.info['project'], BOLD, 14, INK)
         parts = [f"Printed {self.info['printed']}", f"Graph {self.info['digest']}"]
@@ -406,8 +416,9 @@ class DiagramPage(Flowable):
             parts.append(NO_WARNINGS)
         if self.plan.tiled:
             parts.insert(0, f'Part {self.tile.index + 1} of {len(self.plan.tiles)}')
-        draw_text(c, 0, top - 31, self.view['tab_label'], SEMIBOLD, 11.5, NAVY)
-        draw_text(c, text_width(self.view['tab_label'], SEMIBOLD, 11.5) + 12, top - 31,
+        title = self.view.get('title') or self.view['tab_label']
+        draw_text(c, 0, top - 31, title, SEMIBOLD, 11.5, NAVY)
+        draw_text(c, text_width(title, SEMIBOLD, 11.5) + 12, top - 31,
                   '  ·  '.join(parts), REGULAR, 9, MUTED)
         _legend(c, 0, top - 48, self.view['show_unset_legend'], self.view.get('show_b_legend'),
                 self.view['layout'].trunks)
@@ -558,22 +569,70 @@ def diagram_area(pagesize):
             pagesize[1] - 2 * MARGIN - FOOTER_H - HEAD_H - HEAD_GAP - 1)
 
 
-def diagram_pages(lay, paper):
+STAGE_TITLE = '{tab}  ·  {stage}'
+# A stage that does not fit a page is tried with shorter labels (more of
+# them drawn as "[n]" keys), widest first.
+STAGE_LABEL_MAX = (T.SPEAKER_LABEL_MAX, L.LABEL_MAX, 240, 200, 160)
+
+
+def stage_layout(graph, stage, area, first_key=1):
+    """One stage's Layout for a page with ``area`` (points) for the diagram:
+    its tall column wrapped, never wider than prints at MIN_SCALE. When it
+    does not fit the page, the widest label limit under its own that does;
+    when none does, its own (it is then tiled downward)."""
+    options = {'label_max': L.LABEL_MAX, **T.stage_options(stage), 'page': area,
+               'wrap_width': area[0] / tiling.MIN_SCALE, 'first_key': first_key}
+    first = None
+    for label_max in (x for x in STAGE_LABEL_MAX if x <= options['label_max']):
+        lay = L.layout(graph, **{**options, 'label_max': label_max})
+        if not tiling.plan(lay, *area, vertical=True).tiled:
+            return lay
+        first = first or lay
+    return first
+
+
+def overview_stages(graph, lay, pagesize):
+    """[] when the whole Overview fits one page of ``pagesize``; else
+    [(stage, label, graph, layout)], its stages, each laid out for that
+    page. ``graph``: the Overview's graph as drawn (network feeds on or off)."""
+    area = diagram_area(pagesize)
+    if not lay.boxes or not tiling.plan(lay, *area).tiled:
+        return []
+    out, key = [], 1
+    for stage, label, part in T.stage_views(graph):
+        part_lay = stage_layout(part, stage, area, key)
+        key += len(part_lay.keys)
+        out.append((stage, label, part, part_lay))
+    return out
+
+
+def diagram_pages(lay, paper, overview=None):
     """How many pages ``lay``'s diagram takes on ``paper`` (the download
-    panel's hint): the tiles ``build_wiring_pdf`` would draw."""
-    return len(tiling.plan(lay, *diagram_area(PAPER.get(paper, PAPER['11x17']))).tiles)
+    panel's hint): the tiles ``build_wiring_pdf`` would draw. ``overview``:
+    the Overview's graph, when ``lay`` is the Overview's (it may be paged by
+    stage)."""
+    pagesize = PAPER.get(paper, PAPER['11x17'])
+    area = diagram_area(pagesize)
+    stages = overview_stages(overview, lay, pagesize) if overview else []
+    if stages:
+        return sum(len(tiling.plan(part, *area, vertical=True).tiles) for *_, part in stages)
+    return len(tiling.plan(lay, *area).tiles)
 
 
 def plans_for(views, pagesize):
-    """{tab: (plan, crossings)} for the diagram area of ``pagesize``."""
+    """{tab: [(view, plan, crossings)]} for the diagram area of ``pagesize``:
+    one entry, the tab's own view, or one per stage of an Overview paged by
+    stage (the view's ``stages``, each a view of its own)."""
     width, height = diagram_area(pagesize)
     out = {}
     for view in views:
-        lay = view['layout']
-        if view['tab_empty'] or not lay.boxes:
+        if view['tab_empty'] or not view['layout'].boxes:
             continue
-        p = tiling.plan(lay, width, height)
-        out[view['tab']] = (p, tiling.crossings(p, lay.routes))
+        parts = view.get('stages') or [view]
+        out[view['tab']] = []
+        for part in parts:
+            p = tiling.plan(part['layout'], width, height, vertical=bool(part.get('stage')))
+            out[view['tab']].append((part, p, tiling.crossings(p, part['layout'].routes)))
     return out
 
 
@@ -588,18 +647,20 @@ def _story(info, views, plans, pages, width, empty):
             text = EMPTY_PROJECT if empty else (view['tab_empty_text'] or 'Nothing on this tab.')
             story.append(_Empty(info, view, text))
             continue
-        p, crossings = plans[view['tab']]
-        tab_pages = {t: pages.get((view['tab'], t)) for t in range(len(p.tiles))}
-        marks = tile_marks(p, crossings, tab_pages)
-        for tile in p.tiles:
-            story.append(DiagramPage(info, view, p, tile, marks[tile.index]))
+        for part, p, crossings in plans[view['tab']]:
+            tab_pages = {t: pages.get((view['tab'], part.get('stage'), t))
+                         for t in range(len(p.tiles))}
+            marks = tile_marks(p, crossings, tab_pages)
+            for tile in p.tiles:
+                story.append(DiagramPage(info, part, p, tile, marks[tile.index]))
         story += _connections(view, width, S)
         story += _warnings(view, S)
     return story
 
 
 def build_wiring_pdf(*, project, views, digest, paper, printed, empty=False):
-    """The PDF's bytes. ``views``: ``views_wiring.tab_view`` dicts, in order."""
+    """The PDF's bytes. ``views``: ``views_wiring.tab_view`` dicts, in order
+    (the Overview's through ``views_wiring.staged`` to page it by stage)."""
     register_fonts()
     pagesize = PAPER.get(paper, PAPER['11x17'])
     plans = plans_for(views, pagesize)

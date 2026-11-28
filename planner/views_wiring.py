@@ -14,7 +14,9 @@ table under the diagram lists each key's ends and cable.
 ``?tabs=`` the tabs to include, ``?network=0`` network feeds off,
 ``?paper=11x17`` or ``24x36``, ``?tz=`` the viewer's time zone for the
 printed stamp. B input links are drawn there as on screen: lighter, labelled
-"(B)". Every page names the graph's digest, shown on screen too.
+"(B)". Every page names the graph's digest, shown on screen too. An Overview
+too big for one page of the chosen paper is paged by signal-flow stage there
+(``staged``); the screen's Overview and the DXF stay one drawing.
 
 ``wiring_diagram_dxf`` (Download DXF, for Vectorworks) writes one ``.dxf``
 per chosen tab, each the whole tab in one drawing (``connections.dxf``); a
@@ -27,7 +29,8 @@ named for its tab, never its project.
 Both downloads leave the network feeds out unless ``?network=1`` (the
 panel's box, unticked by default); the screen's own toggle is unchanged.
 The panel shows how many diagram pages each tab is at each paper size
-(``download_hints``, from ``connections.tiling``).
+(``download_hints``, from ``connections.tiling``; the Overview's by stage
+when it would be tiled).
 """
 import io
 import re
@@ -150,7 +153,12 @@ def connection_rows(graph, lay, full=None):
             'to': _end(to, edge.get('to_ports', ''), slot),
             'cable': cable,
         })
-    # Comms patch links are listed here, not drawn: keyed C1, C2 ...
+    return rows + comm_rows(graph, every)
+
+
+def comm_rows(graph, every):
+    """Comms patch links are listed, not drawn: keyed C1, C2 ..."""
+    rows = []
     for n, edge in enumerate((e for e in graph['edges'] if e.get('comm')), 1):
         transport = ', '.join(TRANSPORT_NAMES.get(t, t) for t in edge.get('transports', ()))
         cable = ' · '.join([transport] + edge.get('cable_types', []))
@@ -182,6 +190,27 @@ def unset_banner(graph, tab):
     return [{'name': n['label'],
              'url': reverse('admin:planner_device_change', args=[n['id'].split(':', 1)[1]])}
             for n in T.unset_devices(graph)]
+
+
+def staged(view, full, paper):
+    """``view`` for the PDF on ``paper``: an Overview that would be tiled
+    gets ``stages``, a view per signal-flow stage (its own graph, layout
+    and ``title``), and a Connections table of the stages' keys. Any other
+    view, and an Overview that fits one page, is returned as it is."""
+    from planner.utils.pdf_exports.wiring_pdf import PAPER, STAGE_TITLE, overview_stages
+
+    if view['tab'] != T.OVERVIEW or view['tab_empty']:
+        return view
+    stages = overview_stages(view['graph'], view['layout'], PAPER.get(paper, PAPER['11x17']))
+    if not stages:
+        return view
+    every = {n['id']: n for n in full['nodes']}
+    parts, rows = [], []
+    for stage, label, graph, lay in stages:
+        parts.append({**view, 'stage': stage, 'graph': graph, 'layout': lay,
+                      'title': STAGE_TITLE.format(tab=view['tab_label'], stage=label)})
+        rows += connection_rows(graph, lay, full)
+    return {**view, 'stages': parts, 'connections': rows + comm_rows(view['graph'], every)}
 
 
 def avb_devices(project):
@@ -342,7 +371,9 @@ def download_hints(full, avb=None):
                 continue
             graph, lay, _ = tab_layout(full, tab, bool(network), avb)
             drawn = bool(lay.boxes) and bool(graph['nodes'] or graph['edges'])
-            by_network[network] = [diagram_pages(lay, paper) if drawn else 0 for paper, _ in PAPERS]
+            by_network[network] = [
+                diagram_pages(lay, paper, graph if tab == T.OVERVIEW else None) if drawn else 0
+                for paper, _ in PAPERS]
         counts = [(f'{paper}-{network}', by_network[network][i])
                   for network in (0, 1) for i, (paper, _) in enumerate(PAPERS)]
         tabs[tab] = {'text': pages_text(counts[0][1]), 'counts': counts}
@@ -394,7 +425,8 @@ def wiring_diagram_pdf(request):
     network = _download_network(request)
     zone = _zone(request)
     full = project_graph(project)
-    views = [tab_view(project, full, tab, network) for tab in _tabs(request)]
+    views = [staged(tab_view(project, full, tab, network), full, paper)
+             for tab in _tabs(request)]
     pdf = build_wiring_pdf(project=project, views=views, digest=digest(full), paper=paper,
                            printed=timezone.now().astimezone(zone), empty=not full['nodes'])
     response = HttpResponse(pdf, content_type='application/pdf')
