@@ -253,10 +253,12 @@ class WiringPdfTests(WiringShow, TestCase):
 
     def tab_starts(self, pages):
         """The index of each tab's first page: one with a title block that
-        is not a later part of a tiled diagram ("Overview Part 2 of 2")."""
+        is not a later part of a tiled diagram ("Overview Part 2 of 2") nor
+        a later stage of the Overview ("Overview · B Outputs → ...")."""
         return [i for i, text in enumerate(pages)
                 if text.startswith(self.project.name)
-                and not re.match(r'.* Part (?!1 of)\d+ of \d+ · ', text.split('\n')[1])]
+                and not re.match(r'.* Part (?!1 of)\d+ of \d+ · ', text.split('\n')[1])
+                and not re.match(r'Overview\s+·\s+[BC]\s', text.split('\n')[1])]
 
     def test_every_tab_by_default_each_on_its_own_page_with_a_title_block(self):
         reader, pages = self.pdf()

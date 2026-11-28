@@ -23,8 +23,8 @@ from planner.tests.test_comm_devices import PLAIN_STATIC
 from planner.tests.test_comms_tab import CommsShow
 from planner.tests.test_wiring_layout import WiringShow
 from planner.utils.pdf_exports import wiring_pdf
-from planner.views_wiring import (MANY_PAGES, avb_devices, download_hints, file_part, suggestion_text,
-                                  tab_view)
+from planner.views_wiring import (MANY_PAGES, avb_devices, download_hints, file_part, staged,
+                                  suggestion_text, tab_view)
 
 NAME = '<img src=x onerror=alert(1)>'
 QUOTED = '"\'><b>&amp; ]]> Łódź'
@@ -762,12 +762,14 @@ class DownloadPanelTests(DxfMixin, WiringShow, TestCase):
             counts = dict(hints['tabs'][tab]['counts'])
             self.assertEqual(sorted(counts), ['11x17-0', '11x17-1', '24x36-0', '24x36-1'])
             for network in (0, 1):
-                lay = self.tab(tab, bool(network))['layout']
+                view = self.tab(tab, bool(network))
                 for paper in ('11x17', '24x36'):
-                    self.assertEqual(counts[f'{paper}-{network}'], wiring_pdf.diagram_pages(lay, paper))
-            # the Overview is just too wide for one 11 x 17 page; the rest fit
-            n = 2 if tab == T.OVERVIEW else 1
-            text = '2 diagram pages' if n == 2 else '1 diagram page'
+                    self.assertEqual(counts[f'{paper}-{network}'], wiring_pdf.diagram_pages(
+                        view['layout'], paper, view['graph'] if tab == T.OVERVIEW else None))
+            # the Overview is just too wide for one 11 x 17 page, so it is
+            # paged by stage: A, B and C; the rest fit
+            n = 3 if tab == T.OVERVIEW else 1
+            text = '3 diagram pages' if n == 3 else '1 diagram page'
             self.assertEqual(hints['tabs'][tab]['text'], text)
             self.assertRegex(page, rf'value="{tab}"[^>]*> [^<]+ <span class="wd-pages"'
                                    rf' data-p-11x17-0="{n}" data-p-24x36-0="1" data-p-11x17-1="{n}"'
@@ -784,11 +786,12 @@ class DownloadPanelTests(DxfMixin, WiringShow, TestCase):
         counts = dict(hints['tabs'][T.OVERVIEW]['counts'])
         self.assertGreater(counts['11x17-0'], 1)
         self.client.get(reverse('planner:wiring_diagram'))
-        views = [self.tab(T.OVERVIEW)]
-        plans = wiring_pdf.plans_for(views, wiring_pdf.PAPER['11x17'])
-        self.assertEqual(counts['11x17-0'], len(plans[T.OVERVIEW][0].tiles))
-        plans = wiring_pdf.plans_for(views, wiring_pdf.PAPER['24x36'])
-        self.assertEqual(counts['24x36-0'], len(plans[T.OVERVIEW][0].tiles))
+        full = project_graph(self.project)
+        for paper in ('11x17', '24x36'):
+            views = [staged(self.tab(T.OVERVIEW), full, paper)]
+            plans = wiring_pdf.plans_for(views, wiring_pdf.PAPER[paper])
+            self.assertEqual(counts[f'{paper}-0'],
+                             sum(len(plan.tiles) for _, plan, _ in plans[T.OVERVIEW]))
         self.assertLess(counts['24x36-0'], counts['11x17-0'])
 
     def test_a_tab_over_four_pages_at_tabloid_suggests_the_big_sheet(self):

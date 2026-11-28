@@ -56,9 +56,18 @@ is a single box, in the Device inputs column.
 "N comms patches · see Comms tab" line to a device with comms links only.
 
 ``without_network(graph)`` is the Overview with "Show network feeds" off:
-no AVB / Dante network edges. An amp or processor slot one fed stays on its
-box, named with its source ("AVB 1 ← P1 AVB 3"), so the box still says what
-plugs in where.
+no AVB / Dante network edges. A slot one fed stays on its box (``kept``),
+named with its source ("AVB 1 ← P1 AVB 3", a console's "Ch 1–16 ← Y001 In
+1–17"), so the box still says what plugs in where.
+
+``stage_views(graph)`` is the Overview cut by signal-flow stage, for a PDF
+whose Overview would not fit one page (``STAGES``): A what arrives at a
+console or an I/O device, B what arrives at a processor, an unlinked feed or
+an amp, C the speaker cables. Every drawn edge is in exactly one stage, so a
+stage is laid out and paged on its own and no line leaves its page. A box on
+the boundary is in both: where its lines arrive it keeps its input slots,
+where they leave it has none (the amps on C). A box no line reaches is on
+the stage that owns its kind. The screen and the DXF never use it.
 """
 
 import re
@@ -192,7 +201,9 @@ def _ports(edges, device_id):
             'outputs': sum(r.startswith('deviceoutput:') for r in refs)}
 
 
-KEPT_SLOTS = ('amp', 'processor')   # a console's or an I/O device's slot goes with its line
+# A slot whose feed is hidden stays on its box. (An I/O device's slots are
+# its outputs': ``layout`` never draws a kept one on its inputs box.)
+KEPT_SLOTS = ('amp', 'processor', 'console', 'device')
 
 
 def without_network(graph):
@@ -221,6 +232,63 @@ def without_network(graph):
     kept = {e['id'] for e in edges}
     return {**graph, 'nodes': out_nodes, 'edges': edges,
             'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
+
+
+STAGE_A, STAGE_B, STAGE_C = 'a', 'b', 'c'
+STAGES = (
+    (STAGE_A, 'A  Inputs → Console → Outputs'),
+    (STAGE_B, 'B  Outputs → Processors → Amps'),
+    (STAGE_C, 'C  Amps → Speakers'),
+)
+STAGE_OWNS = {'console': STAGE_A, 'device': STAGE_A, 'processor': STAGE_B, 'amp': STAGE_B}
+
+
+def stage_of(edge, nodes):
+    """The stage that draws ``edge``: by where it arrives."""
+    if 'speaker' in edge.get('transports', ()):
+        return STAGE_C
+    if nodes.get(edge['to'], {}).get('kind') in ('console', 'device'):
+        return STAGE_A
+    return STAGE_B
+
+
+def stage_view(graph, stage):
+    """``graph`` (an Overview graph) with only what ``stage`` draws."""
+    nodes = {n['id']: n for n in graph['nodes']}
+    edges = [e for e in graph['edges'] if not e.get('comm') and stage_of(e, nodes) == stage]
+    arrives = {e['to'] for e in edges}
+    used = arrives | {e['from'] for e in edges}
+    out = []
+    for node in graph['nodes']:
+        owned = STAGE_OWNS.get(node['kind'], STAGE_C) == stage and node['kind'] != 'unlinked'
+        if node['id'] not in used and not owned:
+            continue
+        node = dict(node)
+        if not owned:
+            if node['kind'] == 'device':
+                node['ports'] = _ports(edges, node['id'])
+            if node['id'] not in arrives:
+                node.pop('slots', None)     # only what leaves it is drawn here
+        out.append(node)
+    kept = {e['id'] for e in edges}
+    return {**graph, 'nodes': out, 'edges': edges,
+            'warnings': [w for w in graph['warnings'] if w['edge'] in kept]}
+
+
+def stage_views(graph):
+    """[(stage, label, its graph)] of the stages with anything to draw."""
+    views = [(stage, label, stage_view(graph, stage)) for stage, label in STAGES]
+    return [v for v in views if v[2]['nodes']]
+
+
+def stage_options(stage):
+    """``layout()`` keyword arguments for a stage: only its own columns,
+    a tall one wrapped; C has the Speaker cables tab's room for a label."""
+    from planner.connections.layout import ALL_COLUMNS
+    options = {'hide_empty': ALL_COLUMNS, 'wrap': True}
+    if stage == STAGE_C:
+        options['label_max'] = SPEAKER_LABEL_MAX
+    return options
 
 
 def comms_notes(graph, full):
