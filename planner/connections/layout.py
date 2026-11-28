@@ -37,7 +37,7 @@ A box's lines meet it on port slots SLOT apart, and every device box names
 its own port where a line attaches: a line arriving, at the box's left edge;
 a line leaving, right-aligned at its right edge -- by the line's direction,
 never by the port's name. A line arrives on a named input slot (the graph's
-``slots``: "XLR 1 ← Y001 Analog Out 3 (Left)", in input order; the edge's
+``slots``: "XLR 1 ← Y001 Out 3 (Left)", in input order; the edge's
 ``to_slot``). It leaves from a row of its source ports (the node's
 ``out_slots``, the edge's ``from_slot``), in port order; lines leaving the
 same ports are consecutive rows and the ports are named once, on the first.

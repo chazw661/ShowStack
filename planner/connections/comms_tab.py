@@ -12,27 +12,54 @@ comm device) or 'from' (right) -- and its row there (``from_slot`` /
 and a comm device another's Dante Out goes to is drawn again on the right,
 so every line runs left to right.
 
-A node's ``rows`` lists its ports per box, top to bottom: Dante In, Dante
-Out, 4W, 2W, each by number. The port convention is the comm page's
+A node's ``rows`` lists its ports per box, top to bottom: Dante Rx, Dante
+Tx, 4W, 2W, each by number. The port convention is the comm page's
 (``comm_patch``): a Dante Out goes to a device OUTPUT, a Dante In comes from
 a device INPUT, a 4W send goes to a device INPUT and a 4W receive comes from
-a device OUTPUT. An I/O port's row also says what else it is linked to and
-its name -- "Out 5 ← FOH Aux 12 (Program)" -- so a box carrying program
-shows where it gets it without a console column.
+a device OUTPUT.
+
+A Dante patch is named from the Dante side at both ends (``_dante``), on
+this tab only: the sender's row is "Dante Tx n", the receiver's "Dante Rx
+n", so every line reads Tx → Rx. An I/O device's row adds its jack in
+brackets -- the input the audio goes in at transmits ("Dante Tx 1 (In 1)"),
+the output it comes out of receives ("Dante Rx 3 (Out 3)") -- its Dante
+channel taken to be its port number (nothing else is stored). The line's
+label and the Connections table leave the jack out. The project graph, the
+other tabs and the comm device's own page keep "Dante Out" / "Dante In".
+
+An I/O port's row also says what else it is linked to and its name -- "Out
+5 ← FOH Aux 12 (Program)" -- so a box carrying program shows where it gets
+it without a console column.
 
 A 2-wire port with a destination typed is a row on its comm device and a
 line to a ``destination`` node of that text, labelled with its cable type.
 Any other line's label names its far end, device and port, then its cable
-type: "Arcadia 4W 1 · 4W adapter", "Arcadia Dante In 3". ``layout`` names
+type: "Arcadia 4W 1 · 4W adapter", "Arcadia Dante Rx 3". ``layout`` names
 each row on the side its line attaches.
 """
-ROW_ORDER = {'In': 0, 'Out': 1, 'Dante In': 0, 'Dante Out': 1, '4W': 2, '2W': 3}
+ROW_ORDER = {'In': 0, 'Out': 1, 'Dante In': 0, 'Dante Out': 1, 'Dante Rx': 0, 'Dante Tx': 1,
+             '4W': 2, '2W': 3}
+DANTE_SIDE = {'from': 'Dante Tx', 'to': 'Dante Rx'}
+
 CONSOLE_LINK_FIELDS = ('DeviceInput.console_input', 'DeviceOutput.console_output')
 
 
 def _row_key(port):
     prefix, _, number = port.rpartition(' ')
     return (ROW_ORDER.get(prefix, 9), int(number) if number.isdigit() else 0, port)
+
+
+def _dante(link, side):
+    """(port, row text) of one end of a Dante patch, named from the Dante
+    side: ("Dante Tx 1", "Dante Tx 1 (In 1)") for an I/O device's jack, the
+    same text twice for a comm device's own Dante channel. A link that is
+    not Dante keeps its port: ("4W 1", "4W 1")."""
+    port = link[f'{side}_port']
+    if link.get('transport') != 'dante':
+        return port, port
+    prefix, _, number = port.rpartition(' ')
+    name = f'{DANTE_SIDE[side]} {number}'
+    return (name, name) if prefix.startswith('Dante') else (name, f'{name} ({port})')
 
 
 def _own_links(graph):
@@ -64,10 +91,10 @@ def comms_view(graph):
     def is_comm(node_id):
         return nodes.get(node_id, {}).get('device_kind') == 'comm'
 
-    def row(node_id, box, slot, port, name=''):
-        label = port
+    def row(node_id, box, slot, port, text, name=''):
+        label = text
         if not is_comm(node_id):
-            label = ' '.join(x for x in (port, own.get(slot, '')) if x)
+            label = ' '.join(x for x in (text, own.get(slot, '')) if x)
             if name:
                 label = f'{label} ({name})'
         rows.setdefault(node_id, {}).setdefault(box, {}).setdefault(slot, (port, label))
@@ -81,17 +108,19 @@ def comms_view(graph):
         from_box = 'main' if is_comm(frm) else 'to'
         to_box = 'from' if is_comm(frm) else 'main'
         for i, link in enumerate(edge['links']):
-            row(frm, from_box, link['from_ref'], link['from_port'], link.get('from_name', ''))
-            row(to, to_box, link['to_ref'], link['to_port'], link.get('to_name', ''))
+            from_port, from_text = _dante(link, 'from')
+            to_port, to_text = _dante(link, 'to')
+            row(frm, from_box, link['from_ref'], from_port, from_text, link.get('from_name', ''))
+            row(to, to_box, link['to_ref'], to_port, to_text, link.get('to_name', ''))
             label = ' · '.join(x for x in (
-                ' '.join(y for y in (nodes[to].get('name') or nodes[to].get('label', ''), link['to_port']) if y),
+                ' '.join(y for y in (nodes[to].get('name') or nodes[to].get('label', ''), to_port) if y),
                 link.get('cable_type', '')) if x)
             new_id = f"{edge['id']}.{i}"
             first.setdefault(edge['id'], new_id)
             edges.append({
                 'id': new_id, 'from': frm, 'to': to, 'label': label,
                 'label_lines': [label] if label else [],
-                'from_ports': link['from_port'], 'to_ports': link['to_port'],
+                'from_ports': from_port, 'to_ports': to_port,
                 'transports': [link['transport']], 'network': edge['network'],
                 'status': edge['status'], 'unlinked': False, 'cable': edge.get('cable'),
                 'links': [link], 'sources': edge.get('sources', []), 'comms_tab': True,

@@ -24,16 +24,17 @@ an AVB feed has no cable and an AES feed does even when none is recorded.
 Both ends of a line are named, each inside its own box, and the line's label
 names the far end -- so either end reads without tracing the line:
 
-  source   the edge's ``from_ports``, the ports as the device's panel names
-           them (``_physical``: "Analog Out 5", "AES Out 2", "AVB Out 3",
-           "In 1–15", "Aux 23, Mtx 1–4"). Its row in the source box is the
+  source   the edge's ``from_ports``, the ports by their real number on the
+           device ("Out 17", "In 1–15", "Aux 23, Mtx 1–4"; a processor
+           output is numbered within its type, ``_physical``: "AES Out 2",
+           "AVB Out 3"). Its row in the source box is the
            edge's ``from_slot``; the node lists them in port order in
            ``out_slots`` ([{id, lines}], a line per kind of port). Edges
            leaving the same ports share one row id: the diagram names it once.
   target   the edge's ``to_slot``, one of the node's ``slots``, each naming
            its port and what feeds it. A processor's is its input port ("AES
-           1 ← Y001 AES Out 1 (Left)"). An amp's is the input a source plugs
-           into: "XLR n ← Y001 Analog Out 3 (Left)", "AES n ← ...", n the
+           1 ← Y001 Out 17 (Left)"). An amp's is the input a source plugs
+           into: "XLR n ← Y001 Out 3 (Left)", "AES n ← ...", n the
            lowest channel that source feeds on that transport, plus "· Ch
            1–2" when it feeds several; an AVB feed has no input number of its
            own: "AVB ← SL P1 stream 3 (L Main) · Ch 1"; text that names no
@@ -41,7 +42,9 @@ names the far end -- so either end reads without tracing the line:
            device's is one per line into it: "Ch 1–16, 33 ← Y001 In 1–17".
   label    ``label_lines``: the far device and port, a line per port group
            ("SL P1 AES 1", "Rack 1 Amp 2 XLR 1", "FOH Ch 1–15"), then each PA
-           run's cable; ``label`` is the same on one line. ``to_ports`` are
+           run's cable. A cable from an I/O output to a processor or an amp
+           ends with what it carries ("SL P1 AES 1 · AES", "Rack 1 Amp 2
+           XLR 1 · Analog"): the output's own row is only its number; ``label`` is the same on one line. ``to_ports`` are
            the far ports alone, for the diagram's Connections table.
 
 A device named on another box (a far-end label, a slot's "← source") goes by
@@ -193,20 +196,25 @@ IO_PORTS = ('deviceinput', 'deviceoutput')
 
 
 def _physical(link, port):
-    """The port as its device's own panel names it, for this link. An I/O
-    port feeding a processor or an amp is named by the link's transport --
-    "Analog Out 5", "AES Out 2" (the model stores no port type, so one output
-    patched both ways is two ports); a processor output says it is one:
-    "AVB Out 3". A console link (Dante, MADI ...) and a comms link keep the
-    plain port: "In 3", "Out 5", "Dante Out 2"."""
+    """The port as its device names it: its real number on the device ("Out
+    17", "In 3", "Dante Out 2"), whatever the link carries. A processor's
+    outputs are numbered within their type, so one says it is an output:
+    "AVB Out 3", "AES Out 1"."""
     label = port.label
-    model = port.ref.split(':', 1)[0]
-    if model in PROCESSOR_OUTPUTS:
+    if port.ref.split(':', 1)[0] in PROCESSOR_OUTPUTS:
         return ep.PortLabel(f'{label.prefix} Out', label.number)
-    if (model in IO_PORTS and not link.comm and link.source[0] != 'fk'
-            and link.transport in PHYSICAL):
-        return ep.PortLabel(f'{PHYSICAL[link.transport]} {label.prefix}', label.number)
     return label
+
+
+def _carries(link):
+    """"AES" / "Analog" for a cable from an I/O port to a processor or an
+    amp, for the line's label (the model stores no port type, so the port's
+    row cannot say it); '' for any other link."""
+    port = link.from_port
+    if (port is None or link.comm or link.source[0] == 'fk'
+            or port.ref.split(':', 1)[0] not in IO_PORTS):
+        return ''
+    return PHYSICAL.get(link.transport, '')
 
 
 def unique_names(index):
@@ -225,7 +233,7 @@ def unique_names(index):
 
 
 def _amp_source(link, index, extra_nodes, names):
-    """Where an input's feed comes from, in full: "Y001 Analog Out 3 (Left)",
+    """Where an input's feed comes from, in full: "Y001 Out 3 (Left)",
     "SL P1 stream 3 (L Main)", or the typed text when it names nothing."""
     port = link.from_port
     if port is None:
@@ -543,8 +551,8 @@ def _stored_links(index):
     """Stored Connection rows, as confirmed links: an amp input linked to its
     source output (PR 2b-2), drawn from the processor or the I/O device's
     outputs box, and a processor AES / Analog input linked to an I/O or
-    console output (PR 2b-3); an I/O output is named by its transport there
-    ("AES Out 17").
+    console output (PR 2b-3); an I/O output is its real number there
+    ("Out 17") and the line's label says what it carries.
     Rules (a) and (b) leave those inputs alone. A row whose end is gone
     (deleted outside the ORM) is skipped; the report counts it."""
     links = []
@@ -625,11 +633,12 @@ def _label_parts(links, names, kinds):
     """(from lines, far lines, cables) of one line.
 
     from lines   the source's own ports, as its panel names them, one line
-                 per kind of port: "Analog Out 1", "Aux 23" / "Mtx 1–4, 14".
+                 per kind of port: "Out 1", "Aux 23" / "Mtx 1–4, 14".
                  Drawn inside the source box, where the line leaves it.
     far lines    where the line goes, device and port: "SL P1 AES 1", "Rack 1
                  Amp 2 XLR 1", "FOH Ch 1–16, 33"; a B link's ends " (B) ·
-                 <Source (B)>". The line's label. None for a PA run (no
+                 <Source (B)>"; a cable from an I/O port ends with what it
+                 carries (``_carries``: "SL P1 AES 1 · AES"). The line's label. None for a PA run (no
                  ports) or a line to text that names nothing (the "?" box).
     cables       each PA run's cable label."""
     groups = defaultdict(lambda: ([], []))
@@ -637,14 +646,14 @@ def _label_parts(links, names, kinds):
         source = _physical(link, link.from_port) if link.from_port else None
         key = (source.prefix if source else None,
                link.to_port.label.prefix if link.to_port else None,
-               link.b, link.source_b, link.far, link.to_node)
+               link.b, link.source_b, link.far, link.to_node, _carries(link))
         froms, tos = groups[key]
         if source and source not in froms:
             froms.append(source)
         if link.to_port and link.to_port.label not in tos:
             tos.append(link.to_port.label)
     by_prefix, far_lines = {}, []
-    for (prefix, _, b, source_b, far, to), (froms, tos) in groups.items():
+    for (prefix, _, b, source_b, far, to, carries), (froms, tos) in groups.items():
         if froms:
             seen = by_prefix.setdefault(prefix, [])
             seen += [f for f in froms if f not in seen]
@@ -653,7 +662,7 @@ def _label_parts(links, names, kinds):
         line = ' '.join(x for x in (names.get(to, ''), far or _runs(tos)) if x)
         if b:
             line = f'{line} (B)'
-        far_lines.append(f'{line} · {source_b}' if source_b else line)
+        far_lines.append(' · '.join(x for x in (line, source_b, carries) if x))
     from_lines = [_runs(sorted(labels, key=_sort_key)) for labels in by_prefix.values()]
     return (from_lines, list(dict.fromkeys(x for x in far_lines if x)),
             list(dict.fromkeys(l.cable_label for l in links if l.cable_label)))

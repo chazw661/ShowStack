@@ -2,7 +2,7 @@
 
 Every name in it is user data (device names, labels, PA Destination text, amp
 input text), so every text node and attribute value goes through ``_e`` --
-port names too, which name their source ("XLR 1 ← Y001 Analog Out 3 (Left)"). No
+port names too, which name their source ("XLR 1 ← Y001 Out 3 (Left)"). No
 script, no external references; the styles are inline so the file stands on
 its own. Nothing is shortened: ``layout`` has wrapped every text into lines,
 and a line or tspan is drawn per line. Each box and line keeps its full text

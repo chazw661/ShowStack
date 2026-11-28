@@ -59,7 +59,7 @@ class LAmpSlotsStayNumberedTests(ConnectionFixtures, TestCase):
         node = next(n for n in graph['nodes'] if n['id'] == f'amp:{amp.pk}')
         self.assertEqual([s['label'] for s in node['slots']],
                          ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
-                          'XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1, 4',
+                          'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1, 4',
                           'AES 2 ← SL P1 AES Out 1 (Main L)'])
         drawn = next(b for b in L.layout(graph).boxes if b.node == node['id'])
         self.assertEqual(drawn.slots, [s['label'] for s in node['slots']])

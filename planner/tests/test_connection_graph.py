@@ -122,7 +122,7 @@ class GraphTests(ConnectionFixtures, TestCase):
         self.assertEqual(_edges(graph, self.box_id, f'processor:{sl.pk}'), [])
         [edge] = _edges(graph, self.box_id, f'processor:{sr.pk}')
         self.assertEqual((edge['from_ports'], edge['label'], edge['to_slot']),
-                         ('AES Out 1', 'SR P1 AES 2', f'p1input:{port2.pk}'))
+                         ('Out 1', 'SR P1 AES 2 · AES', f'p1input:{port2.pk}'))
 
     def test_ambiguous_match_is_an_unlinked_edge_with_candidates_and_a_warning(self):
         sl, sr = self.p1('SL P1'), self.p1('SR P1')
@@ -328,8 +328,9 @@ class GraphTests(ConnectionFixtures, TestCase):
         graph = self.graph()
         [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
         self.assertEqual((edge['label'], edge['transports'], edge['status']),
-                         ('SL LA12X #1 AES 1', ['aes'], 'inferred'))
-        self.assertEqual(edge['from_ports'], 'AES Out 1')    # named by the link's transport
+                         ('SL LA12X #1 AES 1 · AES', ['aes'], 'inferred'))
+        # the port is its real number; the label says what the cable carries
+        self.assertEqual(edge['from_ports'], 'Out 1')
         self.assertEqual(_edges(graph, to=f'amp:{amp.pk}'), [edge])   # 'x' draws nothing
 
     def test_one_io_name_twice_on_one_box_is_one_certain_edge(self):
@@ -340,8 +341,8 @@ class GraphTests(ConnectionFixtures, TestCase):
         graph = self.graph()
         [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
         self.assertEqual((edge['label'], edge['match'], edge['unlinked']),
-                         ('SL LA12X #1 XLR 1', ['same_device'], False))
-        self.assertEqual(edge['from_ports'], 'Analog Out 1–2')
+                         ('SL LA12X #1 XLR 1 · Analog', ['same_device'], False))
+        self.assertEqual(edge['from_ports'], 'Out 1–2')
         self.assertNotIn('ambiguous', edge)
         self.assertEqual(graph['warnings'], [])
 

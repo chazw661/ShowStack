@@ -81,33 +81,39 @@ class CommsViewTests(CommsShow, TestCase):
         self.assertEqual([(e['from_ports'], e['to_ports'], e['transports'][0], e['label'])
                           for e in view['edges']], [
             # from the Arcadia, by row; a label names the far end, then the cable
-            ('Dante Out 1', 'Out 3', 'dante', 'MK88 Out 3'),
-            ('Dante Out 2', 'Out 1', 'dante', 'DVS FOH Out 1'),
-            ('Dante Out 3', 'Dante In 1', 'dante', 'Arcadia B Dante In 1'),
+            # a Dante patch is Tx → Rx at both ends, whatever the jack
+            ('Dante Tx 1', 'Dante Rx 3', 'dante', 'MK88 Dante Rx 3'),
+            ('Dante Tx 2', 'Dante Rx 1', 'dante', 'DVS FOH Dante Rx 1'),
+            ('Dante Tx 3', 'Dante Rx 1', 'dante', 'Arcadia B Dante Rx 1'),
             ('4W 1', 'In 3', 'analog', 'Rio SL In 3 · 4W adapter'),
             ('2W 1', '', 'analog', 'XLR3'),                      # 2-wire: its cable only
-            ('In 1', 'Dante In 2', 'dante', 'Arcadia Dante In 2'),          # DVS FOH
-            ('In 3', 'Dante In 1', 'dante', 'Arcadia Dante In 1'),          # MK88
+            ('Dante Tx 1', 'Dante Rx 2', 'dante', 'Arcadia Dante Rx 2'),    # DVS FOH
+            ('Dante Tx 3', 'Dante Rx 1', 'dante', 'Arcadia Dante Rx 1'),    # MK88
             ('Out 5', '4W 1', 'analog', 'Arcadia 4W 1 · 4W adapter'),       # Rio SL
         ])
         rows = {n['label']: {box: [r['label'] for r in rs] for box, rs in n['rows'].items()}
                 for n in view['nodes'] if 'rows' in n}
         self.assertEqual(rows['Arcadia'], {'main': [
-            'Dante In 1', 'Dante In 2', 'Dante Out 1', 'Dante Out 2', 'Dante Out 3',
+            'Dante Rx 1', 'Dante Rx 2', 'Dante Tx 1', 'Dante Tx 2', 'Dante Tx 3',
             '4W 1', '2W 1']})
         # A Rio row says where its signal comes from / goes, and its name.
         self.assertEqual(rows['Rio SL'], {'to': ['Out 5 ← FOH Aux 12 (Program)'],
                                           'from': ['In 3 → FOH Ch 5 (Comm ret)']})
-        self.assertEqual(rows['MK88'], {'to': ['In 3'], 'from': ['Out 3 (Camera PL)']})
-        self.assertEqual(rows['DVS FOH'], {'to': ['In 1'], 'from': ['Out 1']})
-        self.assertEqual(rows['Arcadia B'], {'from': ['Dante In 1']})
+        # An I/O device's Dante row adds its jack: an input transmits, an
+        # output receives. A comm device's has none.
+        self.assertEqual(rows['MK88'], {'to': ['Dante Tx 3 (In 3)'],
+                                        'from': ['Dante Rx 3 (Out 3) (Camera PL)']})
+        self.assertEqual(rows['DVS FOH'], {'to': ['Dante Tx 1 (In 1)'],
+                                           'from': ['Dante Rx 1 (Out 1)']})
+        self.assertEqual(rows['Arcadia B'], {'from': ['Dante Rx 1']})
         self.assertEqual([n['label'] for n in view['nodes'] if n['kind'] == 'destination'],
                          ['Wired BP chain SL'])
         self.assertNotIn('FOH', [n['label'] for n in view['nodes']])     # no console column
 
     def test_the_port_convention(self):
-        """Dante Out -> a device Output, Dante In <- a device Input, 4W send
-        -> a device Input, 4W receive <- a device Output."""
+        """Dante Out -> a device Output, Dante In <- a device Input (each
+        named Tx -> Rx here), 4W send -> a device Input, 4W receive <- a
+        device Output."""
         for e in self.view()['edges']:
             if not e['links']:
                 continue
@@ -115,9 +121,9 @@ class CommsViewTests(CommsShow, TestCase):
             pair = (e['from_ports'].rsplit(' ', 1)[0], frm.split(':')[0],
                     e['to_ports'].rsplit(' ', 1)[0], to.split(':')[0])
             self.assertIn(pair, {
-                ('Dante Out', 'deviceoutput', 'Out', 'deviceoutput'),
-                ('In', 'deviceinput', 'Dante In', 'deviceinput'),
-                ('Dante Out', 'deviceoutput', 'Dante In', 'deviceinput'),
+                ('Dante Tx', 'deviceoutput', 'Dante Rx', 'deviceoutput'),
+                ('Dante Tx', 'deviceinput', 'Dante Rx', 'deviceinput'),
+                ('Dante Tx', 'deviceoutput', 'Dante Rx', 'deviceinput'),     # comm → comm
                 ('4W', 'commport', 'In', 'deviceinput'),
                 ('Out', 'deviceoutput', '4W', 'commport'),
             })
@@ -197,12 +203,12 @@ class CommsLayoutTests(CommsShow, TestCase):
         view = self.view()
         lay = self.lay(view)
         arc = self.box(lay, f'device:{self.arc.pk}#main')
-        self.assertEqual(arc.slots, ['Dante In 1', 'Dante In 2', 'Dante Out 1', 'Dante Out 2',
-                                     'Dante Out 3', '4W 1', '2W 1'])
+        self.assertEqual(arc.slots, ['Dante Rx 1', 'Dante Rx 2', 'Dante Tx 1', 'Dante Tx 2',
+                                     'Dante Tx 3', '4W 1', '2W 1'])
         ins = {arc.slots[i] for i in arc.in_slot.values()}
         outs = {arc.slots[i] for i in arc.out_slot.values()}
-        self.assertEqual(ins, {'Dante In 1', 'Dante In 2', '4W 1'})
-        self.assertEqual(outs, {'Dante Out 1', 'Dante Out 2', 'Dante Out 3', '4W 1', '2W 1'})
+        self.assertEqual(ins, {'Dante Rx 1', 'Dante Rx 2', '4W 1'})
+        self.assertEqual(outs, {'Dante Tx 1', 'Dante Tx 2', 'Dante Tx 3', '4W 1', '2W 1'})
         # every line meets its own row, and no two lines share a side of a row
         for seg, i in list(arc.in_slot.items()) + list(arc.out_slot.items()):
             self.assertEqual(arc.slot_y(seg), arc.row_y(i))
@@ -254,7 +260,8 @@ class CommsPageTests(CommsShow, TestCase):
         drawing = svg_of(r)
         for text in ('To comms', 'Comm devices', 'From comms', 'Arcadia', 'Arcadia B',
                      'data-slot="Out 5 ← FOH Aux 12 (Program)"', 'data-slot="4W 1"',
-                     'data-slot="In 3 → FOH Ch 5 (Comm ret)"', 'data-slot="Dante In 2"',
+                     'data-slot="In 3 → FOH Ch 5 (Comm ret)"', 'data-slot="Dante Rx 2"',
+                     'data-slot="Dante Tx 3 (In 3)"', 'data-slot="Dante Rx 3 (Out 3) (Camera PL)"',
                      'Wired BP chain SL', '2-wire destination', '4W adapter', 'XLR3'):
             self.assertIn(text, drawing, text)
         self.assertEqual(drawing.count('class="wd-link"'), 8)
