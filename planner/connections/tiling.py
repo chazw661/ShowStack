@@ -8,7 +8,8 @@ points, and returns a ``Plan``: one scale for the whole tab and its tiles.
 Scale: the diagram fits the page width and one page, enlarged at most
 MAX_SCALE. The smallest text in a layout is 10 units (slot names, column
 hints), so a scale under MIN_SCALE would print it under 6pt; then the
-diagram is printed at MIN_SCALE and tiled instead.
+diagram is tiled instead: on as few pages as MIN_SCALE needs, at the largest
+scale that still needs no more (``SCALE_STEPS`` tried, largest first).
 
 Tiles never cut through a box:
 
@@ -39,6 +40,7 @@ Y_CUT = 2               # a row cut runs this far above the next box (or header)
 BAND_X = 36.0           # points kept free at a tiled page's left and right
 BAND_Y = 11.0           # ... and top and bottom, for the page markers
 EPS = 0.01
+SCALE_STEPS = 36        # scales tried between MAX_SCALE and MIN_SCALE for a tiled tab
 
 
 @dataclass
@@ -168,7 +170,19 @@ def plan(lay, width, height, min_scale=MIN_SCALE, max_scale=MAX_SCALE):
         region = Region(0, 0.0, lay.width, 0.0, lay.height)
         return Plan(one, [Tile(0, 0, 0, 0.0, 0.0, [region])], lay.width, lay.height)
 
+    tiles = _tiles(lay, width, height, min_scale)
     scale = min_scale
+    for i in range(SCALE_STEPS):
+        bigger = max_scale - (max_scale - min_scale) * i / SCALE_STEPS
+        fewer = _tiles(lay, width, height, bigger)
+        if len(fewer) <= len(tiles):
+            tiles, scale = fewer, bigger
+            break
+    return Plan(scale, tiles, width / scale, height / scale)
+
+
+def _tiles(lay, width, height, scale):
+    """The tiles of ``lay`` printed at ``scale``."""
     tw, th = width / scale, height / scale
     bx, by = BAND_X / scale, BAND_Y / scale
     spans = _column_spans(lay)
@@ -221,7 +235,7 @@ def plan(lay, width, height, min_scale=MIN_SCALE, max_scale=MAX_SCALE):
                 ya[c] = yb[c]
             tiles.append(tile)
             row += 1
-    return Plan(scale, tiles, tw, th)
+    return tiles
 
 
 def owner(plan_, x, y):

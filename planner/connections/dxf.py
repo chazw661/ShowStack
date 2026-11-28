@@ -4,7 +4,8 @@ but whole: no tiling, no page cuts, no "→ p.N" markers.
 
 Top to bottom in model space: a title block (project, tab, when it was
 made, the graph's digest, the scale), the legend, the diagram, then the
-Connections table and Warnings as text.
+Connections table and Warnings as text (no warnings: "Warnings: none" in
+the title block instead).
 
   boxes      closed LWPOLYLINEs (square corners; an unlinked box is DASHED)
   lines      LWPOLYLINEs along each route, a SOLID arrowhead at its end
@@ -106,6 +107,7 @@ LEGEND = (
 TRUNK_LEGEND = 'One colour and name per stream'
 TAP_LEGEND = ('Confirmed', 'Inferred from labels')     # a filled badge, a hollow one
 WHITE = 0xFFFFFF
+NO_WARNINGS = 'Warnings: none'      # in the title block, instead of a Warnings section
 UNSET_LEGEND = ('Console connection not set', ('unset',))
 B_LEGEND = ('B input (lighter; labelled "(B)")', ('b',))
 EMPTY_PROJECT = ('Nothing to draw yet. Add consoles, I/O devices, processors, amps or PA cable '
@@ -302,7 +304,7 @@ class _Drawing:
         return self.msp.add_solid([self.pt(x, y), self.pt(x - 6, y - 3.5), self.pt(x - 6, y + 3.5)],
                                   dxfattribs=self.attribs(layer, colour=colour))
 
-    def badge(self, box, x, y, text, layer, colour, filled, size=9):
+    def badge(self, box, x, y, text, layer, colour, filled, size=L.BADGE_PX):
         """A stream's name in its badge (a circle, or a pill for a longer
         name), all in ``colour``: filled with the name in white, or hollow
         (an inferred tap)."""
@@ -345,7 +347,10 @@ def _title_block(d, project_name, view, digest, printed, width):
     d.rect(-10, y, max(width, 700) + 10, -24, TITLE)
     d.text(0, y + 26, project_name, 18, TITLE, bold=True, fit=max(width, 700))
     d.text(0, y + 48, f"Wiring Diagram: {view['tab_label']}", 14, TITLE, bold=True)
-    d.text(0, y + 66, f'Made {printed} · Graph {digest}', 11, TITLE)
+    made = f'Made {printed} · Graph {digest}'
+    if not view['warnings']:
+        made += f' · {NO_WARNINGS}'
+    d.text(0, y + 66, made, 11, TITLE)
     d.text(0, y + 82, scale_text(), 10, TITLE)
     entries = list(LEGEND)
     if view.get('show_b_legend'):
@@ -487,13 +492,10 @@ def warning_text(w):
 
 def _warnings(d, view, top):
     warnings = view['warnings']
-    title = (f"Warnings ({len(warnings)}) — {view['tab_label']}" if warnings
-             else f"Warnings — {view['tab_label']}")
-    d.text(0, top + 14, title, 14, TABLE, bold=True)
-    y = top + 34
-    if not warnings:
-        d.text(0, y, 'None.', 11, TABLE)
+    if not warnings:            # the title block says "Warnings: none"
         return
+    d.text(0, top + 14, f"Warnings ({len(warnings)}) — {view['tab_label']}", 14, TABLE, bold=True)
+    y = top + 34
     for w in warnings:
         for j, line in enumerate(L.wrap(' '.join(warning_text(w).split()), sum(TABLE_W) - 14)):
             d.text(0 if j == 0 else 12, y, ('• ' if j == 0 else '') + line, 11, TABLE)

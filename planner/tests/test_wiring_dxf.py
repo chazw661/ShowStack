@@ -336,7 +336,7 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         self.assertEqual(title[0], 'wiring show')
         self.assertEqual(title[1], 'Wiring Diagram: Dante')
         self.assertRegex(title[2], r'^Made \w{3} \d{1,2}, \d{4} \d\d:\d\d P[SD]T · Graph '
-                         + digest(project_graph(self.project)) + '$')
+                         + digest(project_graph(self.project)) + '( · Warnings: none)?$')
         self.assertEqual(title[3], dxf.scale_text())
         for label, _ in dxf.LEGEND:
             self.assertIn(label, title)
@@ -416,7 +416,8 @@ class WiringDxfTests(DxfMixin, WiringShow, TestCase):
         box = self.device('Box')
         self.device_input(box, 1, self.channel(desk, 1, 'Kick'))
         table = texts(self.dxf('overview'), dxf.TABLE)
-        self.assertEqual(table, ['Warnings — Overview', 'None.'])
+        self.assertEqual(table, [])         # no Warnings section: the title block says so
+        self.assertTrue(texts(self.dxf('overview'), dxf.TITLE)[2].endswith(' · Warnings: none'))
         self.project = project
 
     def test_arrows_are_text_and_ascii_on_request(self):

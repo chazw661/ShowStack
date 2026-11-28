@@ -52,7 +52,7 @@ STYLE = """
 .wd-key text { font: 700 11px system-ui, -apple-system, sans-serif; fill: #111; }
 .wd-trunk .wd-edge { stroke-width: 1.8; }
 .wd-badge rect { stroke-width: 1.4; }
-.wd-badge text { font: 700 9px system-ui, -apple-system, sans-serif; fill: #fff; text-anchor: middle; }
+.wd-badge text { font: 700 10px system-ui, -apple-system, sans-serif; fill: #fff; text-anchor: middle; }
 .wd-badge.hollow rect { fill: #fff; }
 .wd-box .p[data-stream] { font-weight: 600; }
 """ + ''.join(
@@ -144,7 +144,7 @@ def _badges(trunk):
             f'<g class="wd-badge{"" if badge.filled else " hollow"}" data-tap="{_e(badge.edge)}">'
             f'<rect x="{_n(x0)}" y="{_n(y0)}" width="{_n(x1 - x0)}" height="{_n(y1 - y0)}" '
             f'rx="{_n((y1 - y0) / 2)}"/>'
-            f'<text x="{_n(badge.x)}" y="{_n(badge.y + 3.2)}">{_e(badge.text)}</text></g>')
+            f'<text x="{_n(badge.x)}" y="{_n(badge.y + 3.5)}">{_e(badge.text)}</text></g>')
     return f'<g class="wd-badges{cls}"{attr}>{"".join(out)}</g>'
 
 

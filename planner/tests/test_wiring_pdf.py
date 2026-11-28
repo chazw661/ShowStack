@@ -91,6 +91,30 @@ class TilingPlanTests(SimpleTestCase):
                     self.assertFalse(b.x < r.x0 - 0.01 < b.x + b.w or b.x < r.x1 - 0.01 < b.x + b.w,
                                      f'{b.id} cut across on tile {tile.index}')
 
+    def assert_largest_scale_for_its_pages(self, plan, lay):
+        """Tiled: as few pages as 6pt text needs, and no smaller than it
+        has to be for that many."""
+        self.assertGreater(len(plan.tiles), 1)
+        self.assertGreaterEqual(plan.scale, tiling.MIN_SCALE)
+        self.assertLessEqual(plan.scale, tiling.MAX_SCALE)
+        at_6pt = tiling._tiles(lay, W, H, tiling.MIN_SCALE)
+        self.assertEqual(len(plan.tiles), len(at_6pt))
+        step = (tiling.MAX_SCALE - tiling.MIN_SCALE) / tiling.SCALE_STEPS
+        if plan.scale + step <= tiling.MAX_SCALE + 1e-9:
+            self.assertGreater(len(tiling._tiles(lay, W, H, plan.scale + step)), len(plan.tiles))
+
+    def test_a_tiled_tab_is_printed_larger_when_that_costs_no_page(self):
+        # 30 boxes down one column: 6pt needs so many pages, and each has
+        # room to spare, so the print is larger than 6pt.
+        lay = lay_of(stack(L.MARGIN, 30))
+        plan = tiling.plan(lay, W, H)
+        self.assertGreater(plan.scale, tiling.MIN_SCALE)
+        self.assert_largest_scale_for_its_pages(plan, lay)
+        for t in plan.tiles:
+            for r in t.regions:
+                self.assertLessEqual((r.y1 - t.top) * plan.scale, H + 0.01)
+                self.assertLessEqual((r.x1 - t.x0) * plan.scale, W + 0.01)
+
     def assert_every_box_whole(self, plan, lay):
         for b in lay.boxes:
             covered = sum(y1 - y0 for t in plan.tiles for y0, y1 in tiling.box_regions(t, b))
@@ -113,7 +137,7 @@ class TilingPlanTests(SimpleTestCase):
         boxes = [b for i in range(7) for b in stack(L.MARGIN + i * 420, 2, column=i, prefix=f'c{i}-')]
         lay = lay_of(boxes)
         plan = tiling.plan(lay, W, H)
-        self.assertEqual(plan.scale, tiling.MIN_SCALE)
+        self.assert_largest_scale_for_its_pages(plan, lay)
         self.assertEqual(plan.strips, 2)
         self.assertTrue(all(t.row == 0 for t in plan.tiles))
         # the cut is just left of a column's boxes
@@ -129,7 +153,7 @@ class TilingPlanTests(SimpleTestCase):
     def test_tall_is_cut_between_boxes(self):
         lay = lay_of(stack(L.MARGIN, 30))
         plan = tiling.plan(lay, W, H)
-        self.assertEqual(plan.scale, tiling.MIN_SCALE)
+        self.assert_largest_scale_for_its_pages(plan, lay)
         self.assertGreater(len(plan.tiles), 1)
         self.assertEqual(plan.strips, 1)
         self.assert_never_through_a_box(plan, lay)
@@ -177,7 +201,7 @@ class TilingPlanTests(SimpleTestCase):
         tall = box('Rio 64', L.MARGIN, L.MARGIN + L.TITLE_H, rows=96)
         lay = lay_of([tall, box('After', L.MARGIN, tall.y + tall.h + L.GAP_Y)])
         plan = tiling.plan(lay, W, H)
-        self.assertEqual(plan.scale, tiling.MIN_SCALE)
+        self.assert_largest_scale_for_its_pages(plan, lay)
         cuts = [r.y1 for t in plan.tiles for r in t.regions if tall.y < r.y1 < tall.y + tall.h]
         self.assertTrue(cuts)
         rows = {round(tall.y + tall.head + i * L.SLOT, 2) for i in range(97)}
