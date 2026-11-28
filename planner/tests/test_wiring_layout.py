@@ -107,7 +107,7 @@ class WiringLayoutTests(WiringShow, TestCase):
         self.assertEqual(bus.label, 'Stage Box Out 1')
         self.assertEqual(bus.points[-1][0], self.boxes[f'{box}#out'].x)     # into the outputs box
         # the processor path
-        self.assertEqual(self.route(box, sl).label, 'SL P1 AES 1')
+        self.assertEqual(self.route(box, sl).label, 'SL P1 AES 1 · AES')
         self.assertEqual(self.route(sl, sl_amp).classes, ('inferred',))
         # direct I/O -> amp starts at the outputs box
         direct = self.route(box, f'amp:{self.ff_amp.pk}')
@@ -368,7 +368,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         # the rack view's rows: channel n's AVB stream, XLR and AES inputs, each
         # with its whole patch (PR: wiring PDF, item 6)
         self.assertEqual(box.slots, ['AVB ← SL P1 stream 3 (Delay) · Ch 3',
-                                     'XLR 1 ← Stage Box Analog Out 1 (Fill)',
+                                     'XLR 1 ← Stage Box Out 1 (Fill)',
                                      'AES 2 ← SL P1 AES Out 1 (Main L)'])
         # a slot too long for one line wraps, and its row grows with it
         self.assertEqual(box.h, L.HEAD + sum(L.SLOT + L.SLOT_LH * (len(lines) - 1)
@@ -378,7 +378,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.assert_on_slots(box)
         # each line's label names the amp input it lands on
         self.assertEqual(sorted(r.label for r in self.into(self.amp_id)),
-                         ['SL Amp AES 2', 'SL Amp AVB Ch 3', 'SL Amp XLR 1'])
+                         ['SL Amp AES 2', 'SL Amp AVB Ch 3', 'SL Amp XLR 1 · Analog'])
 
     def test_edge_labels_into_amps_have_no_channel(self):
         self.device_output(self.box, 1, 'Fill')
@@ -395,7 +395,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
             # only an AVB feed, with no input number, lists its channels.
             if 'AVB' not in label:
                 self.assertNotIn('Ch ', label)
-        self.assertEqual(sorted(labels), ['? AVB Nope · SL Amp AVB Ch 1–2', 'SL Amp AES 2', 'SL Amp XLR 1'])
+        self.assertEqual(sorted(labels), ['? AVB Nope · SL Amp AVB Ch 1–2', 'SL Amp AES 2', 'SL Amp XLR 1 · Analog'])
         for edge in self.graph['edges']:
             if edge['to'] == self.amp_id:
                 self.assertNotIn('→', edge['label'])
@@ -414,8 +414,8 @@ class InputSlotTests(ConnectionFixtures, TestCase):
             self.amp_channel(amp, 1, analog_input='Fill', avb_stream='AVB 3 - Delay')
         self.draw()
         self.assertEqual(self.far_labels(), [
-            'Rack 1 - Amp 1 (PA Left) AVB Ch 1', 'Rack 1 - Amp 1 (PA Left) XLR 1',
-            'Rack 1 - Amp 1 (PA Right) AVB Ch 1', 'Rack 1 - Amp 1 (PA Right) XLR 1'])
+            'Rack 1 - Amp 1 (PA Left) AVB Ch 1', 'Rack 1 - Amp 1 (PA Left) XLR 1 · Analog',
+            'Rack 1 - Amp 1 (PA Right) AVB Ch 1', 'Rack 1 - Amp 1 (PA Right) XLR 1 · Analog'])
         # the route labels the diagram draws are the same, each once
         drawn = sorted(r.label for r in self.lay.routes if r.to_node.startswith('amp:'))
         self.assertEqual(drawn, self.far_labels())
@@ -440,12 +440,12 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         for amp in (one, two):
             self.amp_channel(amp, 1, analog_input='Fill')
         self.draw()
-        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (duplicate device) XLR 1'] * 2)
+        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (duplicate device) XLR 1 · Analog'] * 2)
         Amp.objects.filter(pk=one.pk).update(ip_address='10.0.0.1')
         Amp.objects.filter(pk=two.pk).update(ip_address='10.0.0.2')
         self.draw()
-        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (SL Racks, 10.0.0.1) XLR 1',
-                                             'Rack 1 - Amp 1 (SL Racks, 10.0.0.2) XLR 1'])
+        self.assertEqual(self.far_labels(), ['Rack 1 - Amp 1 (SL Racks, 10.0.0.1) XLR 1 · Analog',
+                                             'Rack 1 - Amp 1 (SL Racks, 10.0.0.2) XLR 1 · Analog'])
 
     def test_a_slot_names_which_of_two_same_named_sources_feeds_it(self):
         other = self.device('Stage Box')
@@ -457,8 +457,8 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 2, analog_input='Fill R')
         self.draw()
         self.assertEqual(self.boxes[self.amp_id].slots, [
-            'XLR 1 ← Stage Box (Stage Left) Analog Out 1 (Fill L)',
-            'XLR 2 ← Stage Box (Stage Right) Analog Out 1 (Fill R)'])
+            'XLR 1 ← Stage Box (Stage Left) Out 1 (Fill L)',
+            'XLR 2 ← Stage Box (Stage Right) Out 1 (Fill R)'])
 
     def test_one_source_into_several_channels_is_one_slot(self):
         self.device_output(self.box, 1, 'Fill')
@@ -468,7 +468,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.draw()
         box = self.boxes[self.amp_id]
         self.assertEqual(box.slots, ['AVB ← “Nope” (not linked) · Ch 1–2',
-                                     'XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1–2, 4'])
+                                     'XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2, 4'])
         self.assertEqual(len(self.into(self.amp_id)), 2)
         self.assert_on_slots(box)
 
@@ -480,10 +480,10 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.amp_channel(self.amp_, 3, analog_input='Left')
         self.draw()
         box = self.boxes[self.amp_id]
-        self.assertEqual(box.slots, ['XLR 1 ← Stage Box Analog Out 1 (Left) · Ch 1, 3',
-                                     'XLR 2 ← Stage Box Analog Out 2 (Right)'])
+        self.assertEqual(box.slots, ['XLR 1 ← Stage Box Out 1 (Left) · Ch 1, 3',
+                                     'XLR 2 ← Stage Box Out 2 (Right)'])
         self.assertEqual(sorted(r.label for r in self.into(self.amp_id)),
-                         ['SL Amp XLR 1', 'SL Amp XLR 2'])
+                         ['SL Amp XLR 1 · Analog', 'SL Amp XLR 2 · Analog'])
         self.assert_on_slots(box)
 
     def test_processor_inputs_are_named_slots(self):
@@ -493,10 +493,10 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         self.device_output(self.box, 2, 'Fill')
         self.draw()
         box = self.boxes[f'processor:{self.sl.pk}']
-        self.assertEqual(box.slots, ['AES 1 ← Stage Box AES Out 1 (Main L)',
-                                     'Analog 2 ← Stage Box Analog Out 2 (Fill)'])
+        self.assertEqual(box.slots, ['AES 1 ← Stage Box Out 1 (Main L)',
+                                     'Analog 2 ← Stage Box Out 2 (Fill)'])
         self.assertEqual(sorted(r.label for r in self.into(box.node)),
-                         ['SL P1 AES 1', 'SL P1 Analog 2'])
+                         ['SL P1 AES 1 · AES', 'SL P1 Analog 2 · Analog'])
         self.assert_on_slots(box)
 
     def test_the_svg_draws_each_slot_label(self):
@@ -510,15 +510,16 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         # a wrapped slot is drawn as tspans; its text reads whole
         full = {t.get('data-slot'): ''.join(t.itertext()) for t in root.iter(f'{SVG_NS}text')
                 if t.get('class') == 'p'}
-        names = ['XLR 1 ← Stage Box Analog Out 1 (Fill) · Ch 1–2', 'AES 1 ← Stage Box AES Out 1 (Fill)',
-                 'AES Out 1', 'Analog Out 1']
+        names = ['XLR 1 ← Stage Box Out 1 (Fill) · Ch 1–2', 'AES 1 ← Stage Box Out 1 (Fill)',
+                 'Out 1']
+        # one output patched both ways is one row: its real number
         self.assertEqual(full, {name: name for name in names})
-        self.assertEqual(slots['AES Out 1'], 'AES Out 1')
+        self.assertEqual(slots['Out 1'], 'Out 1')
         # where a line leaves, the port is right-aligned at the box's right edge
         sides = {t.get('data-slot'): (t.get('data-side'), t.get('text-anchor'))
                  for t in root.iter(f'{SVG_NS}text') if t.get('class') == 'p'}
         self.assertEqual(sides, {names[0]: (None, None), names[1]: (None, None),
-                                 names[2]: ('out', 'end'), names[3]: ('out', 'end')})
+                                 names[2]: ('out', 'end')})
 
     # -- source ports: named inside the box, where the line leaves ---------------
 
@@ -542,16 +543,15 @@ class InputSlotTests(ConnectionFixtures, TestCase):
         box = self.one_output_to_many()
         # in port order, one row per line; the rows under a name are the same port
         self.assertEqual(box.out_text,
-                         [['AES Out 1'], ['Analog Out 1'], [], [], ['Analog Out 2']])
+                         [['Out 1'], [], [], [], ['Out 2']])
         edges = {e['id']: e for e in self.graph['edges']}
         self.assertEqual([edges[s.edge['id']]['from_ports'] for s in box.outs],
-                         ['AES Out 1', 'Analog Out 1', 'Analog Out 1', 'Analog Out 1',
-                          'Analog Out 2'])
+                         ['Out 1', 'Out 1', 'Out 1', 'Out 1', 'Out 2'])
         # every line still says where it goes
         self.assertEqual(sorted(r.label for r in self.lay.routes if r.from_node == box.node
                                 and r.to_node != f'console:{self.console_pk()}'),
-                         ['Fill Amp XLR 1', 'SL Amp XLR 1', 'SL Amp XLR 2', 'SL P1 AES 1',
-                          'SR Amp XLR 1'])
+                         ['Fill Amp XLR 1 · Analog', 'SL Amp XLR 1 · Analog',
+                          'SL Amp XLR 2 · Analog', 'SL P1 AES 1 · AES', 'SR Amp XLR 1 · Analog'])
 
     def console_pk(self):
         return Console.objects.get(project=self.project, name='FOH Desk').pk
@@ -559,7 +559,7 @@ class InputSlotTests(ConnectionFixtures, TestCase):
     def test_a_source_port_is_right_aligned_on_its_line(self):
         box = self.one_output_to_many()
         right = [t for t in box.port_texts() if t[0] == 'end']
-        self.assertEqual([t[4] for t in right], ['AES Out 1', 'Analog Out 1', 'Analog Out 2'])
+        self.assertEqual([t[4] for t in right], ['Out 1', 'Out 2'])
         rows = [i for i, lines in enumerate(box.out_text) if lines]
         for (_, x, y, _, _), i in zip(right, rows):
             self.assertEqual(x, box.x + box.w - L.PORT_PAD)

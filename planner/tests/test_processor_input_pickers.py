@@ -503,7 +503,7 @@ class GraphTests(_Client, TestCase):
         edges = {e['from']: e for e in self.edges_into(self.sl)}
         io = edges[f'device:{self.box.pk}']
         self.assertEqual((io['status'], io['unlinked'], io['network']), ('confirmed', False, False))
-        self.assertEqual((io['from_ports'], io['label']), ('AES Out 1', 'SL P1 AES 1'))
+        self.assertEqual((io['from_ports'], io['label']), ('Out 1', 'SL P1 AES 1 · AES'))
         self.assertEqual(io['sources'], [{'kind': 'connection', 'pk': mock.ANY}])
         self.assertEqual(io['to_slot'], f'p1input:{self.aes1.pk}')
         self.assertEqual(io['transports'], ['aes'])
@@ -512,7 +512,7 @@ class GraphTests(_Client, TestCase):
                          ('confirmed', 'Mtx 3', 'SL P1 Analog 2'))
         slots = {s['id']: s['label'] for n in self.graph['nodes'] if n['id'] == f'processor:{self.sl.pk}'
                  for s in n['slots']}
-        self.assertEqual(slots[f'p1input:{self.aes1.pk}'], 'AES 1 ← Y001 AES Out 1 (Left)')
+        self.assertEqual(slots[f'p1input:{self.aes1.pk}'], 'AES 1 ← Y001 Out 1 (Left)')
 
     def test_an_unlinked_input_is_still_matched_by_text(self):
         self.set_label(self.aes1, 'Left · Y001 Out 1')

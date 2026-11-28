@@ -702,7 +702,7 @@ class CommsDxfTests(DxfMixin, CommsShow, TestCase):
         self.assertEqual(len(boxes), len(lay.boxes))
         got = texts(doc, dxf.TEXT)
         for text in ('TO COMMS', 'COMM DEVICES', 'FROM COMMS', 'Arcadia', 'Arcadia B',
-                     'Wired BP chain SL', '4W 1', 'Dante Out 3'):
+                     'Wired BP chain SL', '4W 1', 'Dante Tx 3', 'Dante Rx 3 (Out 3) (Camera PL)'):
             self.assertIn(text, got)
         self.assertIn(squash('Out 5 ← FOH Aux 12 (Program)'), squash(''.join(got)))
         self.assertIn('Wiring Diagram: Comms', texts(doc, dxf.TITLE))
@@ -765,10 +765,13 @@ class DownloadPanelTests(DxfMixin, WiringShow, TestCase):
                 lay = self.tab(tab, bool(network))['layout']
                 for paper in ('11x17', '24x36'):
                     self.assertEqual(counts[f'{paper}-{network}'], wiring_pdf.diagram_pages(lay, paper))
-            self.assertEqual(hints['tabs'][tab]['text'], '1 diagram page')
+            # the Overview is just too wide for one 11 x 17 page; the rest fit
+            n = 2 if tab == T.OVERVIEW else 1
+            text = '2 diagram pages' if n == 2 else '1 diagram page'
+            self.assertEqual(hints['tabs'][tab]['text'], text)
             self.assertRegex(page, rf'value="{tab}"[^>]*> [^<]+ <span class="wd-pages"'
-                                   r' data-p-11x17-0="1" data-p-24x36-0="1" data-p-11x17-1="1"'
-                                   r' data-p-24x36-1="1">· 1 diagram page</span>')
+                                   rf' data-p-11x17-0="{n}" data-p-24x36-0="1" data-p-11x17-1="{n}"'
+                                   rf' data-p-24x36-1="1">· {text}</span>')
         # no comm device: nothing to draw, and no page promised
         self.assertEqual(hints['tabs'][T.COMMS]['text'], 'nothing to draw')
         self.assertEqual(set(dict(hints['tabs'][T.COMMS]['counts']).values()), {0})

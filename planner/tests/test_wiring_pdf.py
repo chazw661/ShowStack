@@ -251,10 +251,17 @@ class WiringPdfTests(WiringShow, TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         return read(response.content)
 
+    def tab_starts(self, pages):
+        """The index of each tab's first page: one with a title block that
+        is not a later part of a tiled diagram ("Overview Part 2 of 2")."""
+        return [i for i, text in enumerate(pages)
+                if text.startswith(self.project.name)
+                and not re.match(r'.* Part (?!1 of)\d+ of \d+ · ', text.split('\n')[1])]
+
     def test_every_tab_by_default_each_on_its_own_page_with_a_title_block(self):
         reader, pages = self.pdf()
         stamp_digest = f'Graph {digest(project_graph(self.project))}'
-        starts = [i for i, text in enumerate(pages) if text.startswith(self.project.name)]
+        starts = self.tab_starts(pages)
         self.assertEqual(len(starts), 6)
         for i, label in zip(starts, ('Overview', 'Dante', 'AVB', 'Analogue/AES', 'Speaker cables',
                                      'Comms')):
@@ -269,14 +276,14 @@ class WiringPdfTests(WiringShow, TestCase):
 
     def test_only_the_chosen_tabs(self):
         _, pages = self.pdf(tabs='overview,speakers')
-        heads = [t.split('\n')[1] for t in pages if t.startswith(self.project.name)]
+        heads = [pages[i].split('\n')[1] for i in self.tab_starts(pages)]
         self.assertEqual([h.split(' ')[0] for h in heads], ['Overview', 'Speaker'])
         _, pages = self.pdf(tabs=['analog'])
-        heads = [t.split('\n')[1] for t in pages if t.startswith(self.project.name)]
+        heads = [pages[i].split('\n')[1] for i in self.tab_starts(pages)]
         self.assertEqual(len(heads), 1)
         self.assertTrue(heads[0].startswith('Analogue/AES'))
         _, pages = self.pdf(tabs='nonsense')                # nothing known: every tab
-        self.assertEqual(sum(t.startswith(self.project.name) for t in pages), 6)
+        self.assertEqual(len(self.tab_starts(pages)), 6)
 
     def test_paper_sizes(self):
         for paper, size in (('11x17', (1224, 792)), ('24x36', (2592, 1728)), ('A4', (1224, 792))):
@@ -287,11 +294,12 @@ class WiringPdfTests(WiringShow, TestCase):
 
     def test_boxes_slots_and_labels_are_real_text(self):
         _, pages = self.pdf(tabs='overview')
-        text = pages[0]
+        text = '\n'.join(pages)
         for word in ('Stage Box', 'FOH Desk', 'SL P1', 'SL Amp', 'DEVICE INPUTS',
                      '(mics & sources plug in here)', '(feeds processors, amps, IEMs)',
-                     'AES 1 ← SL P1 AES Out 1 (Main', 'XLR 1 ← Stage Box Analog Out 3',
-                     'Ch 1 ← Stage Box In 1', 'Analog Out 3', 'AES Out 2', 'Aux 1',
+                     'AES 1 ← SL P1 AES Out 1 (Main', 'XLR 1 ← Stage Box Out 3',
+                     'Ch 1 ← Stage Box In 1', 'FF Amp XLR 1 · Analog', 'SL P1 AES 1 · AES',
+                     'AES 1 ← Stage Box Out 2 (Main', 'Aux 1',
                      'Confirmed (linked on a page)'):
             self.assertIn(word, text)
         self.assertNotIn('…', ''.join(pages))
@@ -300,12 +308,13 @@ class WiringPdfTests(WiringShow, TestCase):
         self.p1_out(self.sl, 'AVB', 2, 'Delay')
         self.amp_channel(self.sl_amp, 2, avb_stream='AVB 2 - Delay')
         _, on = self.pdf(tabs='overview', network='1')
-        self.assertIn('SL Amp AVB Ch 2', on[0])
+        self.assertIn('SL Amp AVB Ch 2', '\n'.join(on))
         # Off unless asked for: no parameter (the panel's box unticked), or 0.
         for params in ({}, {'network': '0'}):
             _, off = self.pdf(tabs='overview', **params)
-            self.assertNotIn('SL Amp AVB Ch 2', off[0])
-        self.assertIn('AVB ← SL P1 stream 2 (Delay)', re.sub(r'\s+', ' ', off[0]))
+            off = '\n'.join(off)
+            self.assertNotIn('SL Amp AVB Ch 2', off)
+        self.assertIn('AVB ← SL P1 stream 2 (Delay)', re.sub(r'\s+', ' ', off))
 
     def test_the_avb_tab_prints_its_streams_whatever_the_network_box_says(self):
         self.p1_out(self.sl, 'AVB', 2, 'Delay')
